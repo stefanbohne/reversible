@@ -47,7 +47,7 @@ eval (EApp f a) = do
             local (const e') $ eval b
         VLitFun _ _ _ _ f _ _ -> 
             lift $ f a'
-        VInt i -> 
+        _ -> 
             lift $ TypeError $ "Value '" ++ show a ++ "' applied to non-function '" ++ show a' ++ "'"
 eval (ERev f) = do
     f' <- eval f
@@ -73,6 +73,17 @@ eval (ECons a b) = do
     b' <- eval b
     b'' <- lift $ checkList b'
     return $ VList $ a' : b''
+eval (EFix e) = do
+    e' <- eval e
+    mfix $ \v -> 
+        case e' of
+            VFun p b -> do
+                env <- patternMatch p v
+                local (const env) $ eval b
+            VLitFun _ _ _ _ f _ _ -> 
+                lift $ f v
+            _ ->
+                lift $ TypeError $ "fix of non-function " ++ show e'
 
 patternMatch :: (Context c) => Expr -> Value -> EvalMonad c (EvalContext c)
 patternMatch (ELit l2) l1 | l1 == l2 = ask

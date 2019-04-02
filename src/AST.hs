@@ -63,6 +63,14 @@ instance MeetSemiLattice Type where
 instance PartialOrd Type where
     leq l r = leq (Join l) (Join r)
 
+typeRev:: Type -> Type
+typeRev TTop = TBottom
+typeRev TBottom = TTop
+typeRev (TList t) = TList (typeRev t)
+typeRev (TPair a b) = TPair (typeRev a) (typeRev b)
+typeRev (TFun j at rt) = TFun j (typeRev at) (typeRev rt)
+typeRev t = t
+
 isEquType :: Type -> Bool
 isEquType TInt = True
 isEquType TBool = True
@@ -89,8 +97,8 @@ instance Show Value where
     show (VBool b) = show b
     show (VString s) = show s
     show (VChar c) = show c
-    show (VFun p b) = "fun " ++ show p ++ " -> " ++ show b
     show (VLitFun _ _ _ n _ _ _) = "(" ++ n ++ ")"
+    show (VFun p b) = "(\\" ++ show p ++ " -> " ++ show b ++ ")"
     show (VPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (VUnit) = "()"
     show (VList l) = "[" ++ (intercalate ", " $ map show l) ++ "]"
@@ -104,6 +112,7 @@ instance Eq Value where
     (VPair a1 b1) == (VPair a2 b2) = a1 == a2 && b1 == b2
     (VUnit) == (VUnit) = True
     (VList l1) == (VList l2) = l1 == l2
+    _ == _ = False
 
 typeOfLit :: Bool -> Value -> Type
 typeOfLit _ (VInt _) = TInt
@@ -128,6 +137,7 @@ data Expr =
     |   ETyped Expr Type
     |   EPair Expr Expr
     |   ECons Expr Expr
+    |   EFix Expr
     deriving (Eq)
 instance Show Expr where
     show (ELit v) = show v
@@ -140,6 +150,7 @@ instance Show Expr where
     show (ETyped e t) = "(" ++ show e ++ "): " ++ show t
     show (EPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (ECons x r) = "(" ++ show x ++ " :: " ++ show r ++ ")"
+    show (EFix e) = "fix(" ++ show e ++ ")"
 
 subst :: (Alternative m, Monad m) => (String -> m Expr) -> Expr -> m Expr
 subst f e = runReaderT (subst_ e) f
@@ -179,3 +190,6 @@ subst_ (ECons e1 e2) = do
     e1 <- subst_ e1
     e2 <- subst_ e2
     return $ ECons e1 e2
+subst_ (EFix e) = do
+    e <- subst_ e
+    return $ EFix e

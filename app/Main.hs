@@ -50,7 +50,9 @@ runCmd (QuitCmd) = liftIO $ do
     exitSuccess 
 runCmd (EvalCmd e) = do 
     env <- lift $ get
+    let tenv = mapValues (\(n, (t, v)) -> t) env
     let venv = mapValues (\(n, (t, v)) -> v) env
+    (_, _, _) <- resultGet $ typeCheckExpr' e tenv True JFun TTop
     liftIO $ putStrLn $ resultPretty $ show <$> evalExpr' e venv
 runCmd (LetCmd p v) = do
         env <- lift $ get

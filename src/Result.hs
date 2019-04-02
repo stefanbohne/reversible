@@ -2,6 +2,7 @@ module Result where
 
 import Control.Applicative
 import Control.Monad.Fail
+import Control.Monad.Fix
 import Data.Monoid
 import qualified Debug.Trace
 
@@ -38,6 +39,8 @@ instance Alternative Result where
     (Success x) <|> _ = Success x
     (Rejected _) <|> y = y
     x <|> _ = x
+instance MonadFix Result where
+    mfix f = f undefined
 
 trace :: (Monad m) => String -> b -> m b 
 trace x y = return $ Debug.Trace.trace x y

@@ -94,3 +94,5 @@ test_parseList = do
         )
     parse_test "[[[]]]" (ECons (ECons (ELit $ VList []) (ELit $ VList [])) (ELit $ VList []))
     
+test_parseFix = do
+    parse_test "\\\\x => x" (EFix (ELam (EVar "x") (EVar "x")))

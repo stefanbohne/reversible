@@ -105,11 +105,11 @@ pExprArith = makeExprParser pExprTyped [
          binOpLit InfixL "++" opConcat]
     ]
 pExpr = (do
-    _ <- try $ operator "\\"
+    f <- try $ (((\p b -> EFix (ELam p b)) <$ (operator "\\\\")) <|> (ELam <$ (operator "\\")))
     p <- pExpr
     _ <- operator "=>"
     b <- pExpr
-    return $ ELam p b) <|> pExprArith
+    return $ f p b) <|> pExprArith
 
 pType :: Parser Type
 pType = makeExprParser pSimpleType [

@@ -173,6 +173,12 @@ typeCheck1 (EPair a b) fw j t = do
         return (ja, ta, jb, tb)
     return (ja \/ jb, TPair ta tb)
 
+typeCheck1 (EFix e) True JFun t = do
+    (_, TFun _ _ t') <- typeCheck e True JFun (TFun JFun (typeRev t) t)
+    return (JFun, t')
+typeCheck1 (EFix e) False _ _ = 
+    lift $ Error $ "fix as pattern"
+    
 typeCheck1 e fw j t = error $ "typeCheck1: '" ++ show e ++"' " ++ show fw ++ " " ++ show j ++ " '" ++ show t ++ "'"
     
     

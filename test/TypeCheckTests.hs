@@ -83,3 +83,8 @@ test_list = do
     tcTest "\\[1, 2, 3] => [1, 2, 3]" (JFun, "[Int] <=> [Int]")
     tcTestFail "\\x: Int => [x, x]"
     tcTest "\\x: Int => [&x, x]" (JFun, "Int -> [Int]")
+
+test_fix = do
+    tcTest "\\\\x: Int => 1" (JFun, "Int")
+    tcTest "\\\\x: Int => x" (JFun, "Int")
+    tcTest "\\\\f: Int <=> Int => \\x: Int => f(x + 1)" (JFun, "Int <=> Int")    

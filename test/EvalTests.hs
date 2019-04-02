@@ -63,3 +63,6 @@ test_splitAt = do
     evalTest "splitAt(4)~(\"\", \"123\")" $ VString "123"
     evalTest "splitAt(0)~(\"123\", \"\")" $ VString "123"
     evalTest "splitAt(0)~(\"\", \"\")" $ VString ""
+
+test_fix = do
+    evalTest "\\\\x: Int => 1" $ VInt 1
