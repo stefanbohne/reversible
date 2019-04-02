@@ -1,12 +1,14 @@
 module TypeCheck where
 
-import Control.Monad.State
+import Prelude hiding (lookup)
+import Control.Monad.State.Strict
 import Control.Applicative
 import Algebra.PartialOrd
 import Algebra.Lattice
 
 import Result
 import AST
+import Context
 
 lin2jc :: Bool -> JanusClass
 lin2jc True = JRev
@@ -50,48 +52,41 @@ getListType :: Type -> Result Type
 getListType (TList t) = Success t
 getListType t = Rejected $ "expected list type but got " ++ show t
 
-type TCContext = ([(String, Type)], [(String, Type)])
-type TCMonad = StateT TCContext Result
+type TCContext c = (c String Type, c  String Type)
+type TCMonad c = StateT (TCContext c) Result
 
-localNonLin :: TCMonad a -> TCMonad a
+localNonLin :: (Context c, Monoid (c String Type)) => TCMonad c a -> TCMonad c a
 localNonLin a = do
     (nonlin, lin) <- get
-    _ <- put (nonlin ++ lin, [])
+    _ <- put (nonlin <> lin, mempty)
     v <- a
     put (nonlin, lin)
     return v
 
-getVar :: String -> TCMonad (Bool, Type)
+getVar :: (Context c) => String -> TCMonad c (Bool, Type)
 getVar n = do
     (nonlin, lin) <- get
-    case lookup n lin of
-         Just t -> return (True, t)
-         Nothing -> case lookup n nonlin of
-            Just t -> return (False, t)
-            Nothing -> lift $ Rejected $ "Variable '" ++ n ++ "' not found"
+    lift $ ((True, ) <$> lookup lin n) <|> ((False, ) <$> lookup nonlin n)
             
-pushVar :: String -> Type -> TCMonad ()
+pushVar :: (Context c) => String -> Type -> TCMonad c ()
 pushVar n t = do
     (nonlin, lin) <- get
-    put (nonlin, (n, t) : lin)
+    put (nonlin, update lin n t)
     return ()
 
-popVar :: String -> TCMonad ()
+popVar :: (Context c, Monoid (c String Type)) => String -> TCMonad c ()
 popVar n = do
     (nonlin, lin) <- get
-    _ <- put (nonlin, filter (\(n', _) -> n' /= n) lin)
+    let lin' = remove lin n
+    _ <- put (nonlin, lin')
     return ()
              
-typeCheckExpr :: Expr -> Result (JanusClass, Type)
-typeCheckExpr e = do
-    (j, t, _) <- typeCheckExpr' e preludeTypes True JFun TTop
-    return (j, t)
-typeCheckExpr' :: Expr -> [(String, Type)] -> Bool -> JanusClass -> Type -> Result (JanusClass, Type, [(String, Type)])
+typeCheckExpr' :: (Context c, Monoid (c String Type)) => Expr -> c String Type -> Bool -> JanusClass -> Type -> Result (JanusClass, Type, c String Type)
 typeCheckExpr' e ctx fw j t = required $ do
-    ((j, t), (nonlin, lin)) <- runStateT (typeCheck e fw j t) (ctx, [])
+    ((j, t), (nonlin, lin)) <- runStateT (typeCheck e fw j t) (ctx, mempty)
     return (j, t, lin)
                  
-typeCheck :: Expr -> Bool -> JanusClass -> Type -> TCMonad (JanusClass, Type)
+typeCheck :: (Context c, Monoid (c String Type)) => Expr -> Bool -> JanusClass -> Type -> TCMonad c (JanusClass, Type)
 typeCheck e fw j t = lift1 (msgNewLine $ "while checking " ++ show e ++ " : " ++ show j ++ " " ++ show t) $ do
     (j', t') <- typeCheck1 e fw j t
     if j' `gt` j then
@@ -107,7 +102,7 @@ typeCheck e fw j t = lift1 (msgNewLine $ "while checking " ++ show e ++ " : " ++
         else
             return (j', t')
             
-typeCheck1 :: Expr -> Bool -> JanusClass -> Type -> TCMonad (JanusClass, Type)
+typeCheck1 :: (Context c, Monoid (c String Type)) => Expr -> Bool -> JanusClass -> Type -> TCMonad c (JanusClass, Type)
 typeCheck1 (ELit l) fw _ _ = do
     let t = typeOfLit fw l
     return (if isEquType $ typeOfLit True l then JRev else JFun, t)
@@ -147,7 +142,7 @@ typeCheck1 (ELam p b) True _ t = do
         (jp, tp) <- typeCheck p False JRev at
         (jb, tb) <- typeCheck b True j rt
         (_, lin) <- get
-        return (JFun, TFun (jp \/ jb \/ lin2jc (lin == [])) tp tb)
+        return (JFun, TFun (jp \/ jb \/ lin2jc (isEmpty lin)) tp tb)
 typeCheck1 (ELam _ _) False _ _ = do
     lift $ Rejected "Lambda as pattern"
 

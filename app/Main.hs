@@ -1,10 +1,10 @@
 module Main where
 
+import Prelude hiding (lookup)
 import System.Console.Repline
 import System.Console.Haskeline
 import System.Exit
 import Control.Monad.IO.Class
-import Data.List
 import Text.Megaparsec.Error
 import Data.Text hiding (map)
 import Control.Monad.State.Strict
@@ -15,8 +15,10 @@ import AST
 import TypeCheck
 import Eval
 import Result
+import Context
+import Internals
 
-type ReplContext = [(String, (Type, Value))]
+type ReplContext = IndexList String (Type, Value)
 type Repl a = HaskelineT (StateT ReplContext IO) a
 
 resultPretty :: Result String -> String
@@ -46,34 +48,35 @@ runCmd :: ReplCmd -> Repl ()
 runCmd (QuitCmd) = liftIO $ do
     putStrLn "Goodbye."
     exitSuccess 
-runCmd (EvalCmd e) = liftIO $ putStrLn $ resultPretty $ show <$> evalExpr e
+runCmd (EvalCmd e) = do 
+    env <- lift $ get
+    let venv = mapValues (\(n, (t, v)) -> v) env
+    liftIO $ putStrLn $ resultPretty $ show <$> evalExpr' e venv
 runCmd (LetCmd p v) = do
         env <- lift $ get
-        let tenv = map (\(n, (t, v)) -> (n, t)) env
-        let venv = map (\(n, (t, v)) -> (n, v)) env
+        let tenv = mapValues (\(n, (t, v)) -> t) env
+        let venv = mapValues (\(n, (t, v)) -> v) env
         (_, tv, _) <- resultGet $ typeCheckExpr' v tenv True JFun TTop
         (_, _, tenv') <- resultGet $ typeCheckExpr' p tenv False JRev tv
         v <- resultGet $ evalExpr' v venv
-        venv' <- resultGet $ patternMatchExpr' p v (venv :: EvalContext)
-        env' <- resultGet $ mapM (\(n, t) -> do
-            v <- lookup n venv'
-            return (n, (t, v))) tenv'
-        _ <- put (env' ++ env)
+        venv' <- resultGet $ patternMatchExpr' p v (venv :: EvalContext IndexList)
+        env' <- resultGet $ mapValuesM (\(n, t) -> do
+            v <- lookup venv' n
+            return (t, v)) tenv'
+        _ <- put (env' <> env)
         return ()
-    where
-        lookup n l = case Prelude.lookup n l of
-            Just v -> Success v
-            Nothing -> TypeError $ "Variable " ++ n ++ " not found in venv"
 runCmd (TypeCmd e) = do
-    env <- get
-    let tenv = map (\(n, (t, v)) -> (n, t)) env
+    env <- lift $ get
+    let tenv = mapValues (\(n, (t, v)) -> t) env
     (j, t, _) <- resultGet $ typeCheckExpr' e tenv True JFun TTop
     _ <- liftIO $ putStrLn $ show j ++ ": " ++ show t
     return ()
 runCmd (ListCmd) = do
-    env <- get
-    forM_ env $ \(n, (t, v)) ->
-        liftIO $ putStrLn $ n ++ " = " ++ show v
+    env <- lift $ get
+    _ <- mapValuesM (\(n, (t, v)) -> do
+        _ <- liftIO $ putStrLn $ n ++ " = " ++ show v
+        return ()) env
+    return ()
 
 
 -- Tab Completion: return a completion for partial words entered
@@ -88,4 +91,4 @@ ini :: Repl ()
 ini = liftIO $ putStrLn "Welcome!"
 
 main :: IO ()
-main = fst <$> runStateT (evalRepl (pure "J> ") cmd options Nothing (Word completer) ini) (map (\(n ,v) -> (n, (typeOfLit True v, v))) prelude)
+main = fst <$> runStateT (evalRepl (pure "J> ") cmd options Nothing (Word completer) ini) (mapValues (\(n, v) -> (typeOfLit True v, v)) internals)

@@ -7,6 +7,7 @@ import Text.Megaparsec.Error
 
 import Parser
 import AST
+import Internals
     
 parse_test :: Text -> Expr -> IO ()
 parse_test src expected = 

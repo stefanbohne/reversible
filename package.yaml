@@ -37,6 +37,9 @@ library:
   - -XOverlappingInstances
   - -XOverloadedStrings
   - -XGADTs
+  - -XKindSignatures
+  - -XExplicitForAll
+  - -XTupleSections
 
 executables:
   thesis-exe:

@@ -3,6 +3,8 @@ module AST where
 import Data.List
 import Algebra.Lattice
 import Algebra.PartialOrd
+import Control.Applicative
+import Control.Monad.Reader
 
 import Result
 
@@ -25,24 +27,23 @@ instance PartialOrd JanusClass where
     
 
 data Type =
-        TInt | TBool | TString | TChar
+        TInt | TBool | TString | TChar | TTop | TBottom
     |   TFun JanusClass Type Type
     |   TPair Type Type
     |   TUnit
     |   TList Type
-    |   TTop
-    |   TBottom
     deriving (Eq)
 instance Show Type where
     show TInt = "Int"
     show TBool = "Bool"
     show TString = "String"
+    show TChar = "Char"
+    show TTop = "Top"
+    show TBottom = "Bottom"
     show (TFun jc at rt) = "(" ++ show at ++ " " ++ show jc ++ " " ++ show rt ++ ")"
     show (TPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (TUnit) = "()"
     show (TList a) = "[" ++ show a ++ "]"
-    show (TTop) = "Top"
-    show (TBottom) = "Bottom"
 instance JoinSemiLattice Type where
     TBottom \/ r = r
     l \/ TBottom = l
@@ -73,15 +74,13 @@ isEquType (TList t) = isEquType t
 isEquType (TPair a b) = isEquType a && isEquType b
 isEquType _ = False
 
-type EvalContext = [(String, Value)]
-
 data Value =
         VInt Int
     |   VBool Bool
     |   VString String
     |   VChar Char
     |   VLitFun JanusClass Type Type String (Value -> Result Value) String (Value -> Result Value)
-    |   VFun EvalContext Expr Expr
+    |   VFun Expr Expr
     |   VPair Value Value
     |   VUnit
     |   VList [Value]
@@ -90,7 +89,7 @@ instance Show Value where
     show (VBool b) = show b
     show (VString s) = show s
     show (VChar c) = show c
-    show (VFun _ p b) = "fun " ++ show p ++ " -> " ++ show b
+    show (VFun p b) = "fun " ++ show p ++ " -> " ++ show b
     show (VLitFun _ _ _ n _ _ _) = "(" ++ n ++ ")"
     show (VPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (VUnit) = "()"
@@ -101,7 +100,7 @@ instance Eq Value where
     (VString s1) == (VString s2) = s1 == s2
     (VChar c1) == (VChar c2) = c1 == c2
     (VLitFun _ _ _ n1 _ _ _) == (VLitFun _ _ _ n2 _ _ _) = n1 == n2
-    (VFun _ p1 b1) == (VFun _ p2 b2) = p1 == p2 && b1 == b2
+    (VFun p1 b1) == (VFun p2 b2) = p1 == p2 && b1 == b2
     (VPair a1 b1) == (VPair a2 b2) = a1 == a2 && b1 == b2
     (VUnit) == (VUnit) = True
     (VList l1) == (VList l2) = l1 == l2
@@ -112,7 +111,7 @@ typeOfLit _ (VBool _) = TBool
 typeOfLit _ (VString _) = TString
 typeOfLit _ (VChar _) = TChar
 typeOfLit _ (VLitFun j at rt _ _ _ _) = TFun j at rt
-typeOfLit _ (VFun _ _ _) = error "runtime-only value"
+typeOfLit _ (VFun _ _) = error "runtime-only value"
 typeOfLit fw (VPair a b) = TPair (typeOfLit fw a) (typeOfLit fw b)
 typeOfLit _ (VUnit) = TUnit
 typeOfLit fw (VList []) = TList (if fw then TBottom else TTop)
@@ -142,90 +141,41 @@ instance Show Expr where
     show (EPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (ECons x r) = "(" ++ show x ++ " :: " ++ show r ++ ")"
 
-    
-checkInt (VInt i) = Success i
-checkInt v = Rejected $ (show v) ++ " is not an Int"
-
-checkBool (VBool b) = Success b
-checkBool v = Rejected $ (show v) ++ " is not a Bool"
-
-checkString (VString s) = Success s
-checkString v = Rejected $ (show v) ++ " is not a String"
-
-checkChar (VChar c) = Success c
-checkChar v = Rejected $ (show v) ++ " is not a Char"
-
-checkList (VList l) = Success l
-checkList v = Rejected $ (show v) ++ " is not a list"
-
-checkPair (VPair a b) = Success (a, b)
-checkPair v = Rejected $ (show v) ++ " is not a tuple"
-
-checkCons (VList (a : b)) = Success (a, b)
-checkCons v@(VList []) = TypeError $ (show v) ++ " is not a non-empty list"
-checkCons v = Rejected $ (show v) ++ " is not a list"
-
-reverseFun :: Value -> Result Value
-reverseFun (VFun ctx p b) = Success $ VFun ctx b p
-reverseFun (VLitFun jc t1 t2 n1 f1 n2 f2) = Success $ VLitFun jc t2 t1 n2 f2 n1 f1
-reverseFun v = Rejected $ (show v) ++ " is not a function"
-
-
-opPlus :: Value
-opPlus = VLitFun JFun TInt (TFun JRev TInt TInt) "+" (\r -> do
-    r <- typeRequired $ checkInt r
-    return $ opPlusK r) "" (\_ -> TypeError $ "not reversible")
-opMinus :: Value
-opMinus = VLitFun JFun TInt (TFun JRev TInt TInt) "-" (\r -> do
-    r <- typeRequired $ checkInt r
-    typeRequired $ reverseFun $ opPlusK r) "" (\_ -> TypeError $ "not reversible")
-opPlusK :: Int -> Value
-opPlusK r = VLitFun JRev TInt TInt ("+" ++ show r) (\l -> do
-        l <- typeRequired $ checkInt l
-        return $ VInt $ l + r) 
-    ("-" ++ show r) (\l -> do
-        l <- typeRequired $ checkInt l
-        return $VInt $ l - r)
-opMul :: Value
-opMul = VLitFun JFun TInt (TFun JRev TInt TInt) "*" (\r -> do
-    r <- typeRequired $ checkInt r
-    return $ opMulK r) "" (\_ -> TypeError $ "not reversible")
-opDiv :: Value
-opDiv = VLitFun JFun TInt (TFun JRev TInt TInt) "/" (\r -> do
-    r <- typeRequired $ checkInt r
-    reverseFun $ opMulK r) "" (\_ -> TypeError $ "not reversible")
-opMulK :: Int -> Value
-opMulK r = VLitFun JRev TInt TInt ("*" ++ show r) (\l -> do
-        l <- typeRequired $ checkInt l
-        return $ VInt $ l * r) 
-    ("/" ++ show r) (\l -> do
-        l <- typeRequired $ checkInt l
-        return $VInt $ l `div` r)
-
-opConcat :: Value
-opConcat = VLitFun JFun TString (TFun JFun TString TString) "++" (\r -> do
-    r <- typeRequired $ checkString r
-    return $ opConcatK r) "" (\_ -> TypeError $ "not reversible")
-opConcatK :: String -> Value
-opConcatK r = VLitFun JFun TString TString (show r ++ "++") (\l -> do
-    l <- typeRequired $ checkString l
-    return $ VString $ l ++ r) "" (\_ -> TypeError $ "not reversible")
-opSplitAt :: Value
-opSplitAt = VLitFun JFun TInt (TFun JRev TString (TPair TString TString)) "splitAt" (\n -> do
-    n <- typeRequired $ checkInt n
-    return $ opSplitAtK n) "" (\_ -> TypeError $ "not reversible")
-opSplitAtK :: Int -> Value
-opSplitAtK n = VLitFun JRev TString (TPair TString TString) ("splitAt(" ++ show n ++ ")") (\s -> do
-    s <- typeRequired $ checkString s
-    let (s1, s2) = splitAt n s
-    return $ VPair (VString s1) (VString s2)) ("unsplitAt(" ++ show n ++ ")") (\v -> do
-    (s1, s2) <- typeRequired $ checkPair v
-    s1 <- typeRequired $ checkString s1
-    s2 <- typeRequired $ checkString s2
-    return $ VString $ s1 ++ s2)
-
-prelude :: [(String, Value)]
-prelude = [("True", VBool True),
-           ("False", VBool False),
-           ("splitAt", opSplitAt)]
-preludeTypes = [(n, typeOfLit True v) | (n, v) <- prelude]
+subst :: (Alternative m, Monad m) => (String -> m Expr) -> Expr -> m Expr
+subst f e = runReaderT (subst_ e) f
+subst_ :: (Alternative m, Monad m) => Expr -> ReaderT (String -> m Expr) m Expr 
+subst_ (ELit v) =
+    return $ ELit v
+subst_ (EVar n) = do
+    s <- ask
+    lift $ s n
+subst_ (EApp f a) = do
+    a <- subst_ a
+    f <- subst_ f
+    return $ EApp f a
+subst_ (ELam p b) = do
+    p <- subst_ p
+    b <- subst_ b
+    return $ ELam p b
+subst_ (EDup e) = do
+    e <- subst_ e
+    return $ EDup e
+subst_ (ERev e) = do
+    e <- subst_ e
+    return $ ERev e
+subst_ (ELet p v s) = do
+    v <- subst_ v
+    p <- subst_ p
+    s <- subst_ s
+    return $ ELet p v s
+subst_ (ETyped e t) = do
+    e <- subst_ e
+    return $ ETyped e t
+subst_ (EPair e1 e2) = do
+    e1 <- subst_ e1
+    e2 <- subst_ e2
+    return $ EPair e1 e2
+subst_ (ECons e1 e2) = do
+    e1 <- subst_ e1
+    e2 <- subst_ e2
+    return $ ECons e1 e2

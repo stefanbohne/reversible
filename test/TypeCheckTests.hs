@@ -9,6 +9,10 @@ import Parser
 import AST
 import Result
 import TypeCheck
+import Internals
+import Context
+
+internalTypes = mapValues (typeOfLit True . snd) (internals :: IndexList String Value)
 
 tcTest :: Text -> (JanusClass, Text) -> IO ()
 tcTest src (expectedJ, expectedSrc) = do
@@ -19,7 +23,8 @@ tcTest src (expectedJ, expectedSrc) = do
         Left err -> fail $ errorBundlePretty err
 tcTestExpr :: Expr -> (JanusClass, Type) -> IO ()
 tcTestExpr expr expected = do
-    assertEqual (Success expected) (typeCheckExpr expr)
+    let tc = (\(j, t, lin) -> (j, t)) <$> typeCheckExpr' expr internalTypes True JFun TTop
+    assertEqual (Success expected) tc
 tcTestFail :: Text -> IO ()
 tcTestFail src = do
     case parseExpr "<src>" src of
@@ -27,7 +32,7 @@ tcTestFail src = do
         Left err -> fail $ errorBundlePretty err
 tcTestFailExpr :: Expr -> IO ()
 tcTestFailExpr expr = do
-    case required $ typeCheckExpr expr of
+    case required $ typeCheckExpr' expr internalTypes True JFun TTop of
         Error _ -> return ()
         res -> assertEqual (Error "*anything*") res
             

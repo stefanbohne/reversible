@@ -10,6 +10,7 @@ import Data.Proxy
 
 import Result
 import AST
+import Internals
 
 type Parser = Parsec Void Text
 
