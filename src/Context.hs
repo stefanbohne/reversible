@@ -10,6 +10,7 @@ class Context c where
     isEmpty :: c k v -> Bool
     mapValues :: ((k, v) -> v') -> c k v -> c k v'
     mapValuesM :: (Monad m) => ((k, v) -> m v') -> c k v -> m (c k v')
+    joinValues :: (Show k, Show v, Eq k) => (v -> v -> v) -> (c k v) -> (c k v) -> (Bool, c k v)
 instance (Context c) => Functor (c a) where
     fmap f = mapValues (\(k, v) -> f v)
 newtype IndexList a b = IndexList { unIndexList :: [(a, b)] }
@@ -24,10 +25,17 @@ instance Context IndexList where
     mapValuesM f (IndexList c) = IndexList <$> mapM (\(k, v) -> do
                                     v' <-  f (k, v)
                                     return (k, v')) c
+    joinValues f (IndexList []) (IndexList r) = (null r, IndexList [])
+    joinValues f (IndexList ((k, v) : r)) (IndexList l) = 
+        let (full, joined) = joinValues f (IndexList r) (IndexList l) in
+        case Prelude.lookup k l of
+            Just v2 -> (full, IndexList $ (k, f v v2) : unIndexList joined)
+            Nothing -> (False, joined)
 instance Semigroup (IndexList a b) where
     (IndexList a) <> (IndexList b) = IndexList $ a <> b
 instance Monoid (IndexList a b) where
     mempty = IndexList mempty
+
 
 mkContext :: (Context c, Monoid (c k v)) => [(k, v)] -> c k v
 mkContext [] = mempty

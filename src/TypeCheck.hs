@@ -5,6 +5,7 @@ import Control.Monad.State.Strict
 import Control.Applicative
 import Algebra.PartialOrd
 import Algebra.Lattice
+import Debug.Trace
 
 import Result
 import AST
@@ -54,6 +55,18 @@ getListType t = Rejected $ "expected list type but got " ++ show t
 
 type TCContext c = (c String Type, c  String Type)
 type TCMonad c = StateT (TCContext c) Result
+
+par :: (Context c) => (Type -> Type -> Type) -> TCMonad c a -> TCMonad c b -> TCMonad c (Bool, a, b)
+par f l r = do
+    (nonlin, lin) <- get
+    l <- l
+    (nonlinl, linl) <- get
+    put (nonlin, lin)
+    r <- r
+    (nonlinr, linr) <- get
+    let (full, lin) = joinValues f linl linr
+    put (nonlin, lin)
+    return (full, l, r)
 
 localNonLin :: (Context c, Monoid (c String Type)) => TCMonad c a -> TCMonad c a
 localNonLin a = do
@@ -173,12 +186,46 @@ typeCheck1 (EPair a b) fw j t = do
         return (ja, ta, jb, tb)
     return (ja \/ jb, TPair ta tb)
 
-typeCheck1 (EFix e) True JFun t = do
-    (_, TFun _ _ t') <- typeCheck e True JFun (TFun JFun (typeRev t) t)
-    return (JFun, t')
+typeCheck1 (EFix e) True _ t = do
+    (_, TFun _ at rt) <- typeCheck e True JFun (TFun JFun (typeRev t) t)
+    if rt `leq` at then
+        return (JFun, rt)
+    else
+        lift $ Rejected $ "fix argument: " ++ show rt ++ " </= " ++ show at
 typeCheck1 (EFix e) False _ _ = 
     lift $ Error $ "fix as pattern"
+
+typeCheck1 (ECaseOf e []) True j t = do
+    _ <- typeCheck e True j TTop
+    return (JRev, TBottom)
+typeCheck1 (ECaseOf e cs) True j t = do
+    (je, te) <- typeCheck e True j TTop
+    let cs' = flip map cs $ \(p, v) -> do {
+        (jp, tp) <- typeCheck p False (j /\ JRev) te;
+        (jv, tv) <- typeCheck v True j TTop;
+        return (jv \/ jp, tv)
+    }
+    foldl1 f cs' 
+    where 
+        f l r = do
+            (full, (jl, tl), (jr, tr)) <- par (\/) l r
+            return (jl \/ jr \/ lin2jc full, tl \/ tr)
+typeCheck1 (ECaseOf e []) False j t = do
+    _ <- typeCheck e False j TBottom
+    return (JRev, TTop)
+typeCheck1 (ECaseOf e cs) False j t = do
+    let cs' = flip map cs $ \(p, v) -> do {
+        (jv, tv) <- typeCheck v False j TBottom;
+        (jp, tp) <- typeCheck p True j TTop;
+        return (jv \/ jp, tv, tp)
+    }
+    (jcs, tvs, tps) <- foldl1 f cs'
+    (je, te) <- typeCheck e False j tvs
+    return (je \/ jcs, tps)
+    where
+        f l r = do
+            (full, (jl, tvl, tpl), (jr, tvr, tpr)) <- par (/\) l r
+            return (jl \/ jr \/ lin2jc full, tvl \/ tvr, tpl /\ tpr)
     
 typeCheck1 e fw j t = error $ "typeCheck1: '" ++ show e ++"' " ++ show fw ++ " " ++ show j ++ " '" ++ show t ++ "'"
-    
-    
+

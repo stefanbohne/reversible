@@ -61,26 +61,32 @@ pExprTerm =
     <|> pListExpr
     <|> pTupleExpr
 pListExpr = do
-    _ <- try $ symbol "["
-    es <- pList pExpr
-    _ <- symbol "]"
+    es <- pList (symbol "[") pExpr (symbol "]")
     return $ foldr ECons (ELit $ VList []) es
 pTupleExpr = do
-    _ <- try $ symbol "("
-    es <- pList pExpr
-    _ <- symbol ")"
+    es <- pList (symbol "(") pExpr (symbol ")")
     return $ foldr foldTup (ELit VUnit) es
     where 
         foldTup l (ELit VUnit) = l
         foldTup l r = EPair l r
-pList p = try(do
+pList :: Parser a -> Parser b -> Parser c -> Parser [b]
+pList start p end = do
+    try start
+    ([] <$ try end) <|> (do
         a <- p
-        pListNext a) <|> (return [])
-    where
-        pListNext a = (do
-            _ <- try $ operator ","
-            b <- pList p
-            return $ a : b) <|> (return [a])
+        r <- pListNext p end
+        return $ a : r)
+pList1 start p end = do
+        try start
+        a <- p
+        r <- pListNext p end
+        return $ a : r
+pListNext :: Parser b -> Parser c -> Parser [b]
+pListNext p end = ([] <$ try end) <|> (do
+    try $ operator ","
+    b <- p
+    r <- pListNext p end
+    return $ b : r)
 pExprDup = (do
     _ <- try $ operator "&"
     e <- pExprTerm
@@ -104,12 +110,33 @@ pExprArith = makeExprParser pExprTyped [
         [binOp InfixR "::" (\l r -> ECons l r),
          binOpLit InfixL "++" opConcat]
     ]
+pExprLet = (do
+    try $ symbol "let"
+    lets <- sepBy1 (do
+        p <- pExpr
+        operator "="
+        e <- pExpr
+        return (p, e)) (try $ operator ";")
+    symbol "in"
+    v <- pExpr
+    return $ foldr (\(p, e) v -> ECaseOf e [(p, v)]) v lets) <|> pExprArith
+pExprCase = (do
+    _ <- try $ symbol "case"
+    e <- pExpr
+    _ <- symbol "of"
+    cases <- sepBy (do
+        p <- pExprLet
+        _ <- symbol "=>"
+        v <- pExpr
+        return (p, v)) (operator ";")
+    _ <- optional $ try $ operator ";"
+    return $ ECaseOf e cases) <|> pExprLet
 pExpr = (do
     f <- try $ (((\p b -> EFix (ELam p b)) <$ (operator "\\\\")) <|> (ELam <$ (operator "\\")))
     p <- pExpr
     _ <- operator "=>"
     b <- pExpr
-    return $ f p b) <|> pExprArith
+    return $ f p b) <|> pExprCase
 
 pType :: Parser Type
 pType = makeExprParser pSimpleType [
@@ -127,9 +154,7 @@ pSimpleType =
     <|> pTupleType
     <|> (symbol "[") *> (TList <$> pType) <* (symbol "]")
 pTupleType = do
-    _ <- try $ symbol "("
-    es <- pList pType
-    _ <- symbol ")"
+    es <- pList (symbol "(") pType (symbol ")")
     return $ foldr foldTup (TUnit) es
     where 
         foldTup l TUnit = l

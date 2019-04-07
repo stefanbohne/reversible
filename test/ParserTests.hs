@@ -57,6 +57,7 @@ test_parseFun = do
     parse_test "\\x => \\y => x" (ELam (EVar "x") (ELam (EVar "y") (EVar "x")))
     parse_test "\\x : Int => x : Int" (ELam (ETyped (EVar "x") TInt) (ETyped (EVar "x") TInt))
     parse_test "\\f(x) => f(x)" (ELam (EApp (EVar"f") (EVar "x")) (EApp (EVar "f") (EVar "x")))
+    parse_test "(\\a => b)(c)" (EApp (ELam (EVar "a") (EVar "b")) (EVar "c"))
 
 test_parseType = do
     parse_test "x : Int" (ETyped (EVar "x") TInt)
@@ -96,3 +97,14 @@ test_parseList = do
     
 test_parseFix = do
     parse_test "\\\\x => x" (EFix (ELam (EVar "x") (EVar "x")))
+
+test_parseLet = do
+    parse_test "let 1=2; 3=4 in 5" (ECaseOf (ELit $ VInt 2) [(ELit $ VInt 1, ECaseOf (ELit $ VInt 4) [(ELit $ VInt 3, ELit $ VInt 5)])])
+    parse_test "\\let a=b in c => d" (ELam (ECaseOf (EVar "b") [(EVar "a", EVar "c")]) (EVar "d"))
+    parse_test "(\\let a=b in c => d)(x)" (EApp (ELam (ECaseOf (EVar "b") [(EVar "a", EVar "c")]) (EVar "d")) (EVar "x"))
+
+test_parseCase = do
+    parse_test "case 1 of" (ECaseOf (ELit $ VInt 1) [])
+    parse_test "case 1 of 2 => 3" (ECaseOf (ELit $ VInt 1) [(ELit $ VInt 2, ELit $VInt 3)])
+    parse_test "case 1 of 2 => 3; 4 => 5" (ECaseOf (ELit $ VInt 1) [
+        (ELit $ VInt 2, ELit $VInt 3), (ELit $ VInt 4, ELit $ VInt 5)])

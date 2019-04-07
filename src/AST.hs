@@ -28,22 +28,22 @@ instance PartialOrd JanusClass where
 
 data Type =
         TInt | TBool | TString | TChar | TTop | TBottom
-    |   TFun JanusClass Type Type
-    |   TPair Type Type
     |   TUnit
     |   TList Type
+    |   TFun JanusClass Type Type
+    |   TPair Type Type
     deriving (Eq)
 instance Show Type where
     show TInt = "Int"
     show TBool = "Bool"
     show TString = "String"
     show TChar = "Char"
-    show TTop = "Top"
-    show TBottom = "Bottom"
-    show (TFun jc at rt) = "(" ++ show at ++ " " ++ show jc ++ " " ++ show rt ++ ")"
     show (TPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (TUnit) = "()"
     show (TList a) = "[" ++ show a ++ "]"
+    show TTop = "Top"
+    show TBottom = "Bottom"
+    show (TFun jc at rt) = "(" ++ show at ++ " " ++ show jc ++ " " ++ show rt ++ ")"
 instance JoinSemiLattice Type where
     TBottom \/ r = r
     l \/ TBottom = l
@@ -87,11 +87,11 @@ data Value =
     |   VBool Bool
     |   VString String
     |   VChar Char
-    |   VLitFun JanusClass Type Type String (Value -> Result Value) String (Value -> Result Value)
-    |   VFun Expr Expr
     |   VPair Value Value
     |   VUnit
     |   VList [Value]
+    |   VLitFun JanusClass Type Type String (Value -> Result Value) String (Value -> Result Value)
+    |   VFun Expr Expr
 instance Show Value where
     show (VInt i) = show i
     show (VBool b) = show b
@@ -129,13 +129,13 @@ typeOfLit fw (VList (x : _)) = TList (typeOfLit fw x)
 data Expr = 
         ELit Value
     |   EVar String 
-    |   EDup Expr
     |   EApp Expr Expr
-    |   ERev Expr
     |   ELam Expr Expr
-    |   ELet Expr Expr Expr
     |   ETyped Expr Type
     |   EPair Expr Expr
+    |   ECaseOf Expr [(Expr, Expr)]
+    |   EDup Expr
+    |   ERev Expr
     |   ECons Expr Expr
     |   EFix Expr
     deriving (Eq)
@@ -146,11 +146,13 @@ instance Show Expr where
     show (EApp f a) = show f ++ "(" ++ show a ++ ")"
     show (ERev f) = show f ++ "~"
     show (ELam p b) = "\\" ++ show p ++ " -> " ++ show b
-    show (ELet p v s) = "let " ++ show p ++ " = " ++ show v ++ "; " ++ show s
     show (ETyped e t) = "(" ++ show e ++ "): " ++ show t
     show (EPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (ECons x r) = "(" ++ show x ++ " :: " ++ show r ++ ")"
     show (EFix e) = "fix(" ++ show e ++ ")"
+    show (ECaseOf e [(p, v)]) = "let " ++ show p ++ " = " ++ show e ++ " in " ++ show v
+    show (ECaseOf e cs) = "case " ++ show e ++ " of " ++ 
+            (intercalate " " $ map (\(p, v) -> show p ++ " => " ++ show v ++ ";") cs)
 
 subst :: (Alternative m, Monad m) => (String -> m Expr) -> Expr -> m Expr
 subst f e = runReaderT (subst_ e) f
@@ -174,11 +176,6 @@ subst_ (EDup e) = do
 subst_ (ERev e) = do
     e <- subst_ e
     return $ ERev e
-subst_ (ELet p v s) = do
-    v <- subst_ v
-    p <- subst_ p
-    s <- subst_ s
-    return $ ELet p v s
 subst_ (ETyped e t) = do
     e <- subst_ e
     return $ ETyped e t
@@ -193,3 +190,10 @@ subst_ (ECons e1 e2) = do
 subst_ (EFix e) = do
     e <- subst_ e
     return $ EFix e
+subst_ (ECaseOf e cs) = do
+    e <- subst_ e
+    cs <- mapM (\(p, v) -> do
+        p <- subst_ p
+        v <- subst_ v
+        return (p, v)) cs
+    return $ ECaseOf e cs

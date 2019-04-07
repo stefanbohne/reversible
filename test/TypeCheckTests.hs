@@ -87,4 +87,24 @@ test_list = do
 test_fix = do
     tcTest "\\\\x: Int => 1" (JFun, "Int")
     tcTest "\\\\x: Int => x" (JFun, "Int")
-    tcTest "\\\\f: Int <=> Int => \\x: Int => f(x + 1)" (JFun, "Int <=> Int")    
+    tcTest "\\\\f: Int <=> Int => \\x: Int => f(x + 1)" (JFun, "Int <=> Int")
+    tcTestFail "\\\\f: Int <=> Int => \\x: Int => f(&x + 1)"
+    tcTest "\\\\append: ([Int], Int) <=> [Int] => \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x)" (JFun, "([Int], Int) <=> [Int]")
+
+test_let = do
+    tcTest "\\let n = m + 1 in n - 1 => m" (JFun, "Int <=> Int")
+    tcTestFail "\\let n = m + 1 in n - 1 => n"
+
+test_case = do
+    tcTest "\\case () of => case () of" (JFun, "Top <=> Bottom")
+    tcTest "case 1 of 1 => 1; 2 => 2" (JRev, "Int")
+    tcTest "case 1 of 1 => 1; 2 => \"\"" (JRev, "Top")
+    tcTestFail "case 1 of 1 => 1; \"\" => \"\""
+    tcTestFail "\\n: Int => case n of 1 => n"
+    tcTestFail "\\n: Int => case 1 of n => 1"
+    tcTest "case 1 of n => n; m => m" (JRev, "Int")
+    tcTest "case 1 of n => n; m => &m" (JFun, "Int")
+    tcTest "case 1 of n => &n; m => m" (JFun, "Int")
+    tcTest "\\x: Int => case 1 of 1 => x; 2 => x" (JFun, "Int <=> Int")
+    tcTest "\\x: Int => case 1 of 1 => x; 2 => 2" (JFun, "Int -> Int")
+    tcTest "case 1 of 1 => \\x: Int => x; 2 => \\x: Int => &x" (JFun, "Int -> Int")    

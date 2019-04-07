@@ -4,6 +4,7 @@ import Prelude hiding (lookup)
 import qualified Prelude
 import Control.Monad.Reader
 import Control.Applicative
+import qualified Debug.Trace
 
 import AST
 import Result
@@ -37,7 +38,10 @@ eval (ELit l) =
     return l
 eval (EVar n) = do
     env <- ask
-    lift $ typeRequired $ lookup env n
+    y <- lift $ typeRequired $ lookup env n
+    return y 
+eval (EDup e) =
+    eval e
 eval (EApp f a) = do
     a' <- eval a
     f' <- eval f
@@ -58,10 +62,6 @@ eval (ELam p b) = do
     p <- lift $ subst f p
     b <- lift $ subst f b
     return $ VFun p b
-eval (ELet p v s) = do
-    v' <- eval v
-    env2 <- patternMatch p v'
-    local (const env2) $ eval s
 eval (ETyped e _) = 
     eval e
 eval (EPair a b) = do
@@ -84,8 +84,14 @@ eval (EFix e) = do
                 lift $ f v
             _ ->
                 lift $ TypeError $ "fix of non-function " ++ show e'
+eval (ECaseOf e cs) = do
+    ve <- eval e
+    let cs' = (flip map) cs $ \(p, v) -> (do
+            env <- patternMatch p ve
+            local (const env) $ eval v)
+    foldr (<|>) (lift $ Rejected "All cases rejected") cs'
 
-patternMatch :: (Context c) => Expr -> Value -> EvalMonad c (EvalContext c)
+--patternMatch :: (Context c) => Expr -> Value -> EvalMonad c (EvalContext c)
 patternMatch (ELit l2) l1 | l1 == l2 = ask
                           | otherwise = lift $ Rejected $ "Mismatch: " ++ show l2 ++ " != " ++ show l1
 patternMatch (EVar n) v = do
@@ -105,11 +111,6 @@ patternMatch (EApp f a) v = do
         l -> lift $ TypeError $ "Value '" ++ show a ++ "' applied to non-function '" ++ show f' ++ "' in pattern"
 patternMatch (ELam p b) _ = do
     lift $ TypeError $ "Lambda '" ++ show (ELam p b) ++ "' as pattern"
-patternMatch (ELet p v s) x = do
-    env2 <- patternMatch s x
-    local (const env2) $ do
-        p' <- eval p
-        patternMatch v p'
 patternMatch (ETyped e _) v = 
     patternMatch e v
 patternMatch (EPair a b) v = do
@@ -122,3 +123,12 @@ patternMatch (ECons a b) v = do
     envb <- patternMatch b (VList vb)
     enva <- local (const envb) $ patternMatch a va 
     return enva
+patternMatch (ECaseOf e cs) v = do
+    let ys = (flip map) cs $ \(p, v') -> do {
+        env <- patternMatch v' v;
+        local (const env) $ do
+            v <- eval p
+            return (env, v)
+    }
+    (env, v) <- foldr (<|>) (lift $ Rejected "All cases rejected") ys 
+    local (const env) $ patternMatch e v

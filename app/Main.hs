@@ -23,12 +23,14 @@ type Repl a = HaskelineT (StateT ReplContext IO) a
 
 resultPretty :: Result String -> String
 resultPretty (Success a) = a
+resultPretty (Suspended a) = resultPretty a
 resultPretty (Rejected msg) = "Rejected: " ++ msg
 resultPretty (Error msg) = "Error: " ++ msg
 resultPretty (TypeError msg) = "Type Error: " ++ msg
 
 resultGet :: Result a -> Repl a
 resultGet (Success a) = return a
+resultGet (Suspended a) = resultGet a
 resultGet (Rejected msg) = do
     _ <- liftIO $ putStrLn $ "Rejected: " ++ msg
     abort
