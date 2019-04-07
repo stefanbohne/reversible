@@ -91,12 +91,18 @@ eval (ECaseOf e cs) = do
             local (const env) $ eval v)
     foldr (<|>) (lift $ Rejected "All cases rejected") cs'
 
---patternMatch :: (Context c) => Expr -> Value -> EvalMonad c (EvalContext c)
+patternMatch :: (Context c) => Expr -> Value -> EvalMonad c (EvalContext c)
 patternMatch (ELit l2) l1 | l1 == l2 = ask
                           | otherwise = lift $ Rejected $ "Mismatch: " ++ show l2 ++ " != " ++ show l1
 patternMatch (EVar n) v = do
     env <- ask
     return $ update env n v
+patternMatch (EDup e) v = do
+    v' <- eval e
+    if v == v' then
+        ask
+    else
+        lift $ Rejected $ "Mismatch: " ++ show v' ++ " != " ++ show v
 patternMatch (EApp f a) v = do
     f' <- eval f
     case f' of
@@ -109,6 +115,8 @@ patternMatch (EApp f a) v = do
             v' <- lift $ f v
             patternMatch a v'
         l -> lift $ TypeError $ "Value '" ++ show a ++ "' applied to non-function '" ++ show f' ++ "' in pattern"
+patternMatch (ERev e) _ = do
+    lift $ TypeError $ "'~' as pattern"
 patternMatch (ELam p b) _ = do
     lift $ TypeError $ "Lambda '" ++ show (ELam p b) ++ "' as pattern"
 patternMatch (ETyped e _) v = 

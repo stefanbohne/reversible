@@ -1,7 +1,11 @@
-strlen: String -> Int = \splitAt(1)~(c, r) => case c of
+strlen: String -> Int = 
+    \splitAt(1)~(c, r) => case c of
         "" => 0;
         x => 1 + strlen(r)
 substr: String -> (Int, Int) -> String =
     \s => \(f, t) => let (x2, s2) = splitAt(&f)(s); 
                          (s3, x3) = splitAt(t - f)(s2) 
                      in s3
+
+pWord: String -> String <=> ((), String) = 
+    \w: String => \splitAt(strlen(&w))~(&w, r) => ((), r)

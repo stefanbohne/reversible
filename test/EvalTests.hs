@@ -48,6 +48,14 @@ test_lambda = do
     evalTest "(\\1 => 2) (1)" $ VInt 2
     evalTestRejected "(\\1 => 1) (2)"
 
+test_rev = do
+    evalTest "(\\x: Int => x+1)~(43)" $ VInt 42
+    evalTest "(\\(\\x: Int => x + 1)~(x) => x)(41)" $ VInt 42
+
+test_dup = do
+    evalTest "(\\x: Int => (&x, x))(42)" $ VPair (VInt 42) (VInt 42)
+    evalTest "(\\(&x, x: Int) => x)(42, 42)" $ VInt 42
+
 test_pair = do
     evalTest "(12, 30)" $ VPair (VInt 12) (VInt 30)
     evalTest "(\\(a, b) => a + b) (12, 30)" $ VInt 42

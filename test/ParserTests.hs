@@ -118,7 +118,3 @@ test_parseCase = do
     parse_test "case 1 of 2 => 3" (ECaseOf (ELit $ VInt 1) [(ELit $ VInt 2, ELit $VInt 3)])
     parse_test "case 1 of 2 => 3; 4 => 5" (ECaseOf (ELit $ VInt 1) [
         (ELit $ VInt 2, ELit $VInt 3), (ELit $ VInt 4, ELit $ VInt 5)])
-    parse_test "\
-        \\\\\len: String -> Int => \\splitAt(1)~(c, r) => case c of\n\
-        \\"\" => 0;\n\
-        \x => 1 + len(r)" (EVar "len")

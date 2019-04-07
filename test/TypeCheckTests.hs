@@ -79,6 +79,7 @@ test_lam = do
 test_dup = do
     tcTest "&1" (JRev, "Int")
     tcTest "\\x: Int => &x" (JFun, "Int -> Int")
+    tcTest "\\x: Int => \\ &x => ()" (JFun, "Int -> Int <=> ()")
 
 test_tuple = do
     tcTest "()" (JRev, "()")

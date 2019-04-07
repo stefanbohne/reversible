@@ -160,7 +160,7 @@ typeCheck1 (ELam _ _) False _ _ = do
     lift $ Rejected "Lambda as pattern"
 
 typeCheck1 (EDup e) fw _ t = do
-    (je, te) <- localNonLin $ typeCheck e fw JFun t
+    (je, te) <- localNonLin $ typeCheck e True JFun (if fw then t else typeRev t)
     return (je \/ (lin2jc $ isEquType te), te)
 
 typeCheck1 (ECons x r) fw j t = do
