@@ -118,7 +118,7 @@ typeCheck e fw j t = lift1 (msgNewLine $ "while checking " ++ show e ++ " : " ++
 typeCheck1 :: (Context c, Monoid (c String Type)) => Expr -> Bool -> JanusClass -> Type -> TCMonad c (JanusClass, Type)
 typeCheck1 (ELit l) fw _ _ = do
     let t = typeOfLit fw l
-    return (if isEquType $ typeOfLit True l then JRev else JFun, t)
+    return (lin2jc $ isEquType $ typeOfLit True l, t)
 
 typeCheck1 (ETyped e t) fw j t2 = do
     (j', t') <- typeCheck e fw j t
@@ -130,7 +130,7 @@ typeCheck1 (EVar n) True _ _ = do
         _ <- popVar n
         return (JRev, tv)
     else 
-        return (JFun, tv)
+        return (lin2jc $ isEquType tv, tv)
 typeCheck1 (EVar n) False _ TBottom = 
     lift $ Rejected $ "Variable pattern '" ++ n ++ "' needs type annotation"
 typeCheck1 (EVar n) False _ t = do
@@ -161,7 +161,7 @@ typeCheck1 (ELam _ _) False _ _ = do
 
 typeCheck1 (EDup e) fw _ t = do
     (je, te) <- localNonLin $ typeCheck e fw JFun t
-    return (je \/ if isEquType te then JRev else JFun, te)
+    return (je \/ (lin2jc $ isEquType te), te)
 
 typeCheck1 (ECons x r) fw j t = do
     t <- lift $ getListType t <|> return (if fw then TTop else TBottom)

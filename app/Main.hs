@@ -1,25 +1,31 @@
 module Main where
 
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, readFile)
 import System.Console.Repline
 import System.Console.Haskeline
 import System.Exit
 import Control.Monad.IO.Class
 import Text.Megaparsec.Error
-import Data.Text hiding (map)
+import Data.Text hiding (map, foldl, foldr)
+import Data.Text.IO (readFile)
 import Control.Monad.State.Strict
 import Control.Applicative
+import Control.Exception (try)
+import Paths_reversible
 
 import ReplParser
+import FileParser
 import AST
 import TypeCheck
 import Eval
 import Result
 import Context
-import Internals
+import qualified Internals
 
 type ReplContext = IndexList String (Type, Value)
 type Repl a = HaskelineT (StateT ReplContext IO) a
+internals :: IndexList String Value
+internals = Internals.internals
 
 resultPretty :: Result String -> String
 resultPretty (Success a) = a
@@ -43,7 +49,7 @@ resultGet (TypeError msg) = do
 
 -- Evaluation : handle each line user inputs
 cmd :: String -> Repl ()
-cmd input = case parseRepl "<repl>" $ pack input of
+cmd input = case parseRepl internals "<repl>" $ pack input of
     Left err -> liftIO $ putStrLn $ errorBundlePretty err
     Right cmd -> runCmd cmd
 runCmd :: ReplCmd -> Repl ()
@@ -57,18 +63,18 @@ runCmd (EvalCmd e) = do
     (_, _, _) <- resultGet $ typeCheckExpr' e tenv True JFun TTop
     liftIO $ putStrLn $ resultPretty $ show <$> evalExpr' e venv
 runCmd (LetCmd p v) = do
-        env <- lift $ get
-        let tenv = mapValues (\(n, (t, v)) -> t) env
-        let venv = mapValues (\(n, (t, v)) -> v) env
-        (_, tv, _) <- resultGet $ typeCheckExpr' v tenv True JFun TTop
-        (_, _, tenv') <- resultGet $ typeCheckExpr' p tenv False JRev tv
-        v <- resultGet $ evalExpr' v venv
-        venv' <- resultGet $ patternMatchExpr' p v (venv :: EvalContext IndexList)
-        env' <- resultGet $ mapValuesM (\(n, t) -> do
-            v <- lookup venv' n
-            return (t, v)) tenv'
-        _ <- put (env' <> env)
-        return ()
+    env <- lift $ get
+    let tenv = mapValues (\(n, (t, v)) -> t) env
+    let venv = mapValues (\(n, (t, v)) -> v) env
+    (_, tv, _) <- resultGet $ typeCheckExpr' v tenv True JFun TTop
+    (_, _, tenv') <- resultGet $ typeCheckExpr' p tenv False JRev tv
+    v <- resultGet $ evalExpr' v venv
+    venv' <- resultGet $ patternMatchExpr' p v (venv :: EvalContext IndexList)
+    env' <- resultGet $ mapValuesM (\(n, t) -> do
+        v <- lookup venv' n
+        return (t, v)) tenv'
+    _ <- put (env' <> env)
+    return ()
 runCmd (TypeCmd e) = do
     env <- lift $ get
     let tenv = mapValues (\(n, (t, v)) -> t) env
@@ -81,18 +87,38 @@ runCmd (ListCmd) = do
         _ <- liftIO $ putStrLn $ n ++ " = " ++ show v
         return ()) env
     return ()
-
+runCmd (LoadCmd f) = do
+    text <- liftIO $ try (readFile f)
+    case text of
+        Right text -> case parseFile internals f text of
+            Left err -> liftIO $ putStrLn $ errorBundlePretty err
+            Right lets -> do
+                --let p = foldr EPair (ELit VUnit) $ map (\(n, t, _) -> ETyped (EVar n) t) lets
+                --let v = foldr EPair (ELit VUnit) $ map (\(_, t, v) -> ETyped v t) lets
+                --liftIO $ putStrLn $ show $ EFix (ELam p v)
+                --runCmd (LetCmd p (EFix (ELam p v)))
+                forM lets $ \(n, t, v) ->
+                    runCmd (LetCmd (EVar n) (EFix (ELam (ETyped (EVar n) t) (ETyped v t))))
+                return ()
+        Left exc ->
+            liftIO $ putStrLn $ "Error opening '" ++ f ++ "': " ++ show (exc :: IOException)
 
 -- Tab Completion: return a completion for partial words entered
 completer :: Monad m => WordCompleter m
 completer n = do
   return []
 
+help args = do
+    liftIO $ putStrLn "Help!"
+
 options :: [(String, [String] -> Repl ())]
 options = []
 
 ini :: Repl ()
-ini = liftIO $ putStrLn "Welcome!"
+ini = do
+    prelude <- liftIO $ getDataFileName "prelude.rev"
+    runCmd (LoadCmd prelude)
+    liftIO $ putStrLn "Welcome!"
 
 main :: IO ()
 main = fst <$> runStateT (evalRepl (pure "J> ") cmd options Nothing (Word completer) ini) (mapValues (\(n, v) -> (typeOfLit True v, v)) internals)

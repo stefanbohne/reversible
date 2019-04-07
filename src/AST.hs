@@ -97,8 +97,8 @@ instance Show Value where
     show (VBool b) = show b
     show (VString s) = show s
     show (VChar c) = show c
-    show (VLitFun _ _ _ n _ _ _) = "(" ++ n ++ ")"
-    show (VFun p b) = "(\\" ++ show p ++ " -> " ++ show b ++ ")"
+    show (VLitFun _ _ _ n _ _ _) = n
+    show (VFun p b) = "(\\" ++ show p ++ " => " ++ show b ++ ")"
     show (VPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (VUnit) = "()"
     show (VList l) = "[" ++ (intercalate ", " $ map show l) ++ "]"

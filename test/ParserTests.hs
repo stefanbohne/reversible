@@ -4,18 +4,28 @@ module ParserTests where
 import Data.Text
 import Test.Framework
 import Text.Megaparsec.Error
+import Control.Monad
 
 import Parser
 import AST
-import Internals
-    
+import Context
+import qualified Internals
+import Internals hiding (internals)
+
+internals :: IndexList String Value
+internals = Internals.internals
+
 parse_test :: Text -> Expr -> IO ()
 parse_test src expected = 
-    case parseExpr "<test>" src of
+    case parseExpr internals "<test>" src of
         Right v -> assertEqual expected v
         Left err -> fail $ errorBundlePretty err
 
 bin op l r = EApp (EApp (ELit op) l) r
+
+test_parseInternals = 
+    forM (unIndexList internals) $ \(n, _) -> do
+        parse_test (pack n) (EVar n)
 
 test_parseInt = do
     parse_test "1" (ELit $ VInt 1)
@@ -108,3 +118,7 @@ test_parseCase = do
     parse_test "case 1 of 2 => 3" (ECaseOf (ELit $ VInt 1) [(ELit $ VInt 2, ELit $VInt 3)])
     parse_test "case 1 of 2 => 3; 4 => 5" (ECaseOf (ELit $ VInt 1) [
         (ELit $ VInt 2, ELit $VInt 3), (ELit $ VInt 4, ELit $ VInt 5)])
+    parse_test "\
+        \\\\\len: String -> Int => \\splitAt(1)~(c, r) => case c of\n\
+        \\"\" => 0;\n\
+        \x => 1 + len(r)" (EVar "len")

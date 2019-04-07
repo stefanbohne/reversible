@@ -4,30 +4,36 @@ module EvalTests where
 import Data.Text
 import Test.Framework hiding (Success)
 import Text.Megaparsec.Error
+import Control.Monad
 
 import Parser
 import AST
 import Eval
 import Result
-import Internals
+import qualified Internals
+import Internals hiding (internals)
 import Context
 
-internals_ :: IndexList String Value
-internals_ = internals
+internals :: IndexList String Value
+internals = Internals.internals
 
 evalTest :: Text -> Value -> IO ()
 evalTest src expected = do
-    case parseExpr "<test>" src of
-        Right expr -> assertEqual (Success expected) (evalExpr' expr internals_)
+    case parseExpr internals "<test>" src of
+        Right expr -> assertEqual (Success expected) (evalExpr' expr internals)
         Left err -> fail $ errorBundlePretty err
 
 evalTestRejected :: Text -> IO ()
 evalTestRejected src = do
-    case parseExpr "<test>" src of
-        Right expr -> case evalExpr' expr internals_ of
+    case parseExpr internals "<test>" src of
+        Right expr -> case evalExpr' expr internals of
             Rejected _ -> return ()
         Left err -> fail $ errorBundlePretty err
         
+test_internals = 
+    forM (unIndexList internals) $ \(n, v) ->
+        evalTest (pack n) v
+
 test_lit = do
     evalTest "10" $ VInt 10
     evalTest "\\x => x" $ VFun (EVar "x") (EVar "x")

@@ -27,6 +27,9 @@ dependencies:
 - text
 - parser-combinators
 
+data-files:
+- prelude.rev 
+
 library:
   source-dirs: src
   ghc-options:

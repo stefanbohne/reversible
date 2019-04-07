@@ -65,15 +65,16 @@ opSplitAtK :: Int -> Value
 opSplitAtK n = VLitFun JRev TString (TPair TString TString) ("splitAt(" ++ show n ++ ")") (\s -> do
     s <- typeRequired $ checkString s
     let (s1, s2) = splitAt n s
-    return $ VPair (VString s1) (VString s2)) ("unsplitAt(" ++ show n ++ ")") (\v -> do
+    return $ VPair (VString s1) (VString s2)) ("splitAt(" ++ show n ++ ")~") (\v -> do
     (s1, s2) <- typeRequired $ checkPair v
     s1 <- typeRequired $ checkString s1
     s2 <- typeRequired $ checkString s2
     return $ VString $ s1 ++ s2)
 
-internals :: (Context c, Monoid (c String Value)) => c String Value
-internals = mkContext [
-    ("True", VBool True),
-    ("False", VBool False),
-    ("splitAt", opSplitAt)
+_internals = [
+    VBool True, 
+    VBool False, 
+    opSplitAt
     ]
+internals :: (Context c, Monoid (c String Value)) => c String Value
+internals = mkContext $ map (\v -> (show v, v)) _internals

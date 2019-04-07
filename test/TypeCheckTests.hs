@@ -4,20 +4,25 @@ module TypeCheckTests where
 import Data.Text
 import Test.Framework hiding (Success)
 import Text.Megaparsec.Error
+import Control.Monad
 
 import Parser
 import AST
 import Result
 import TypeCheck
-import Internals
+import qualified Internals
+import Internals hiding (internals)
 import Context
 
-internalTypes = mapValues (typeOfLit True . snd) (internals :: IndexList String Value)
+internals :: IndexList String Value
+internals = Internals.internals
+internalTypes :: IndexList String Type
+internalTypes = mapValues (typeOfLit True . snd) internals
 
 tcTest :: Text -> (JanusClass, Text) -> IO ()
 tcTest src (expectedJ, expectedSrc) = do
-    case parseExpr "<src>" src of
-        Right expr -> case parseType "<expectedSrc>" expectedSrc of
+    case parseExpr internals "<src>" src of
+        Right expr -> case parseType internals "<expectedSrc>" expectedSrc of
             Right expectedT -> tcTestExpr expr (expectedJ, expectedT)
             Left err -> fail $ errorBundlePretty err
         Left err -> fail $ errorBundlePretty err
@@ -27,7 +32,7 @@ tcTestExpr expr expected = do
     assertEqual (Success expected) tc
 tcTestFail :: Text -> IO ()
 tcTestFail src = do
-    case parseExpr "<src>" src of
+    case parseExpr internals "<src>" src of
         Right expr -> tcTestFailExpr expr
         Left err -> fail $ errorBundlePretty err
 tcTestFailExpr :: Expr -> IO ()
@@ -36,6 +41,11 @@ tcTestFailExpr expr = do
         Error _ -> return ()
         res -> assertEqual (Error "*anything*") res
             
+test_internals = 
+    forM (unIndexList internals) $ \(n, v) ->
+        let t = typeOfLit True v in
+        tcTestExpr (EVar n) (lin2jc (isEquType t), t)
+
 test_int = do
     tcTest "123" (JRev, "Int")
     tcTest "123: Int" (JRev, "Int")
@@ -77,12 +87,12 @@ test_tuple = do
 
 test_list = do
     tcTest "\\[] => []" (JFun, "[Top] <=> [Bottom]")
-    tcTest "\\[\"x\", \'x\'] => [1,True]" (JFun, "[Bottom] -> [Top]")
+    tcTest "\\[\"x\", \'x\'] => [1,True]" (JFun, "[Bottom] <=> [Top]")
     tcTest "\\[[[]]] => [[[]]]" (JFun, "[[[Top]]] <=> [[[Bottom]]]")
     tcTest "\\[1] => [1]" (JFun, "[Int] <=> [Int]")
     tcTest "\\[1, 2, 3] => [1, 2, 3]" (JFun, "[Int] <=> [Int]")
     tcTestFail "\\x: Int => [x, x]"
-    tcTest "\\x: Int => [&x, x]" (JFun, "Int -> [Int]")
+    tcTest "\\x: Int => [&x, x]" (JFun, "Int <=> [Int]")
 
 test_fix = do
     tcTest "\\\\x: Int => 1" (JFun, "Int")

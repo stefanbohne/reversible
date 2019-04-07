@@ -1,9 +1,11 @@
 module Parser where
 
+import Prelude hiding (lookup)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 import Control.Monad.Combinators.Expr 
+import Control.Monad.Reader
 import Data.Text (Text)
 import Data.Void
 import Data.Proxy
@@ -11,48 +13,57 @@ import Data.Proxy
 import Result
 import AST
 import Internals
+import Context
 
-type Parser = Parsec Void Text
+type Parser c = ReaderT (c String Value) (Parsec String Text)
 
+instance ShowErrorComponent String where
+    showErrorComponent err = err
 
-sc :: Parser ()
+sc :: Parser c ()
 sc = L.space
   space1                         
   (L.skipLineComment "//")       
   (L.skipBlockComment "/*" "*/") 
 
-lexeme :: Parser a -> Parser a
+lexeme :: Parser c a -> Parser c a
 lexeme = L.lexeme sc 
 
-symbol :: Text -> Parser Text
+symbol :: Text -> Parser c Text
 symbol = L.symbol sc 
 
-operator :: Text -> Parser ()
+operator :: Text -> Parser c ()
 operator text = do
     _ <- string text
     _ <- notFollowedBy $ oneOf ("!@#$%^&*-+=<>|/\\~:;" :: String)
     _ <- sc
     return ()
-    
 
-pIdent :: Parser String 
+binOp :: (Parser ctx (a -> a -> a) -> Operator (Parser ctx) a) -> Text -> (a -> a -> a) -> Operator (Parser ctx) a
+binOp cons op f = cons $ do
+    _ <- try $ operator op
+    return f
+binOpLit cons op fun = binOp cons op (\l r -> EApp (EApp (ELit fun) r) l)
+        
+
+pIdent :: Parser c String 
 pIdent = do 
     h <- letterChar
     t <- many (alphaNumChar <|> char '_')
     _ <- sc
     return (h : t)
 
-pInt :: Parser Int
+pInt :: Parser c Int
 pInt = L.signed sc $ lexeme L.decimal
 
-pString :: Parser String
+pString :: Parser c String
 pString = lexeme $ char '"' >> manyTill L.charLiteral (char '"')
 
-pChar :: Parser Char
+pChar :: Parser c Char
 pChar = lexeme $ char '\'' >> L.charLiteral <* (char '\'')
 
 
-pExprTerm :: Parser Expr
+pExprTerm :: Parser c Expr
 pExprTerm = 
         EVar <$> pIdent
     <|> (ELit . VInt) <$> pInt
@@ -69,7 +80,7 @@ pTupleExpr = do
     where 
         foldTup l (ELit VUnit) = l
         foldTup l r = EPair l r
-pList :: Parser a -> Parser b -> Parser c -> Parser [b]
+pList :: Parser ctx a -> Parser ctx b -> Parser ctx c -> Parser ctx [b]
 pList start p end = do
     try start
     ([] <$ try end) <|> (do
@@ -81,7 +92,7 @@ pList1 start p end = do
         a <- p
         r <- pListNext p end
         return $ a : r
-pListNext :: Parser b -> Parser c -> Parser [b]
+pListNext :: Parser ctx b -> Parser ctx c -> Parser ctx [b]
 pListNext p end = ([] <$ try end) <|> (do
     try $ operator ","
     b <- p
@@ -138,32 +149,29 @@ pExpr = (do
     b <- pExpr
     return $ f p b) <|> pExprCase
 
-pType :: Parser Type
+pType :: Parser ctx Type
 pType = makeExprParser pSimpleType [
         [binOp InfixN "<=>" (TFun JRev)],
         [binOp InfixR "->" (TFun JFun)]
     ]
-pSimpleType :: Parser Type
+pSimpleType :: Parser ctx Type
 pSimpleType =
-        TInt <$ lexeme "Int"
-    <|> TBool <$ lexeme "Bool"
-    <|> TString <$ lexeme "String"
-    <|> TChar <$ lexeme "Char"
-    <|> TTop <$ lexeme "Top"
-    <|> TBottom <$ lexeme "Bottom"
+        TInt <$ symbol "Int"
+    <|> TBool <$ symbol "Bool"
+    <|> TString <$ symbol "String"
+    <|> TChar <$ symbol "Char"
+    <|> TTop <$ symbol "Top"
+    <|> TBottom <$ symbol "Bottom"
     <|> pTupleType
     <|> (symbol "[") *> (TList <$> pType) <* (symbol "]")
+pTupleType :: Parser ctx Type
 pTupleType = do
     es <- pList (symbol "(") pType (symbol ")")
     return $ foldr foldTup (TUnit) es
     where 
         foldTup l TUnit = l
         foldTup l r = TPair l r
-binOp :: (Parser (a -> a -> a) -> Operator Parser a) -> Text -> (a -> a -> a) -> Operator Parser a
-binOp cons op f = cons $ do
-    _ <- try $ operator op
-    return f
-binOpLit cons op fun = binOp cons op (\l r -> EApp (EApp (ELit fun) r) l)
 
-parseExpr = parse (sc *> pExpr <* eof)
-parseType = parse (sc *> pType <* eof)
+
+parseExpr internals = parse (runReaderT (sc *> pExpr <* eof) internals)
+parseType internals = parse (runReaderT (sc *> pType <* eof) internals)
