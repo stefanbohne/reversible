@@ -62,7 +62,12 @@ instance MeetSemiLattice Type where
     _ /\ _ = TBottom
 instance PartialOrd Type where
     leq l r = leq (Join l) (Join r)
-
+tPairFold :: [Type] -> Type
+tPairFold vs = foldr f TUnit vs
+    where f l TUnit = l
+          f l r@(TPair _ _) = TPair l r
+          f l r = TPair l r
+    
 typeRev:: Type -> Type
 typeRev TTop = TBottom
 typeRev TBottom = TTop
@@ -92,6 +97,7 @@ data Value =
     |   VList [Value]
     |   VLitFun JanusClass Type Type String (Value -> Result Value) String (Value -> Result Value)
     |   VFun Expr Expr
+    |   VFix Expr [(String, Type, Expr)]
 instance Show Value where
     show (VInt i) = show i
     show (VBool b) = show b
@@ -99,6 +105,7 @@ instance Show Value where
     show (VChar c) = show c
     show (VLitFun _ _ _ n _ _ _) = n
     show (VFun p b) = "(\\" ++ show p ++ " => " ++ show b ++ ")"
+    show (VFix e es) = show e
     show (VPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (VUnit) = "()"
     show (VList l) = "[" ++ (intercalate ", " $ map show l) ++ "]"
@@ -113,6 +120,11 @@ instance Eq Value where
     (VUnit) == (VUnit) = True
     (VList l1) == (VList l2) = l1 == l2
     _ == _ = False
+vPairFold :: [Value] -> Value
+vPairFold vs = foldr f VUnit vs
+    where f l VUnit = l
+          f l r@(VPair _ _) = VPair l r
+          f l r = VPair l r
 
 typeOfLit :: Bool -> Value -> Type
 typeOfLit _ (VInt _) = TInt
@@ -137,7 +149,7 @@ data Expr =
     |   EDup Expr
     |   ERev Expr
     |   ECons Expr Expr
-    |   EFix Expr
+    |   EFix [(String, Type, Expr)]
     deriving (Eq)
 instance Show Expr where
     show (ELit v) = show v
@@ -149,11 +161,16 @@ instance Show Expr where
     show (ETyped e t) = "(" ++ show e ++ "): " ++ show t
     show (EPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (ECons x r) = "(" ++ show x ++ " :: " ++ show r ++ ")"
-    show (EFix e) = "fix(" ++ show e ++ ")"
+    show (EFix es) = "fix(" ++ intercalate ", " (map (\(n, t, e) -> n ++ ": " ++ show t ++ " = " ++ show e) es) ++ ")"
     show (ECaseOf e [(p, v)]) = "let " ++ show p ++ " = " ++ show e ++ " in " ++ show v
     show (ECaseOf e cs) = "case " ++ show e ++ " of " ++ 
             (intercalate " " $ map (\(p, v) -> show p ++ " => " ++ show v ++ ";") cs)
-
+ePairFold :: [Expr] -> Expr
+ePairFold vs = foldr f (ELit $ VUnit) vs
+    where f l (ELit VUnit) = l
+          f l r@(EPair _ _) = EPair l r
+          f l r = EPair l r
+            
 subst :: (Alternative m, Monad m) => (String -> m Expr) -> Expr -> m Expr
 subst f e = runReaderT (subst_ e) f
 subst_ :: (Alternative m, Monad m) => Expr -> ReaderT (String -> m Expr) m Expr 
@@ -187,9 +204,9 @@ subst_ (ECons e1 e2) = do
     e1 <- subst_ e1
     e2 <- subst_ e2
     return $ ECons e1 e2
-subst_ (EFix e) = do
-    e <- subst_ e
-    return $ EFix e
+subst_ (EFix es) = do
+    es <- forM es $ \(n, t, e) -> do e <- subst_ e; return (n, t, e)
+    return $ EFix es
 subst_ (ECaseOf e cs) = do
     e <- subst_ e
     cs <- mapM (\(p, v) -> do

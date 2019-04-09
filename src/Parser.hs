@@ -65,7 +65,8 @@ pChar = lexeme $ char '\'' >> L.charLiteral <* (char '\'')
 
 pExprTerm :: Parser c Expr
 pExprTerm = 
-        EVar <$> pIdent
+        pExprFix
+    <|> EVar <$> pIdent
     <|> (ELit . VInt) <$> pInt
     <|> (ELit . VString) <$> pString
     <|> (ELit . VChar) <$> pChar
@@ -76,10 +77,17 @@ pListExpr = do
     return $ foldr ECons (ELit $ VList []) es
 pTupleExpr = do
     es <- pList (symbol "(") pExpr (symbol ")")
-    return $ foldr foldTup (ELit VUnit) es
-    where 
-        foldTup l (ELit VUnit) = l
-        foldTup l r = EPair l r
+    return $ ePairFold es
+pExprFix = do
+    try $ operator "fix"
+    es <- pList (symbol "(") (do
+        n <- try pIdent
+        operator ":"
+        t <- pType
+        operator "="
+        e <- pExpr
+        return (n, t, e)) (symbol ")")
+    return $ EFix es
 pList :: Parser ctx a -> Parser ctx b -> Parser ctx c -> Parser ctx [b]
 pList start p end = do
     try start
@@ -136,18 +144,19 @@ pExprCase = (do
     e <- pExpr
     _ <- symbol "of"
     cases <- sepBy (do
-        p <- pExprLet
+        p <- try pExprLet
         _ <- symbol "=>"
         v <- pExpr
         return (p, v)) (operator ";")
     _ <- optional $ try $ operator ";"
     return $ ECaseOf e cases) <|> pExprLet
-pExpr = (do
-    f <- try $ (((\p b -> EFix (ELam p b)) <$ (operator "\\\\")) <|> (ELam <$ (operator "\\")))
+pExprLam = (do
+    try $ operator "\\"
     p <- pExpr
     _ <- operator "=>"
     b <- pExpr
-    return $ f p b) <|> pExprCase
+    return $ ELam p b) <|> pExprCase
+pExpr = pExprLam
 
 pType :: Parser ctx Type
 pType = makeExprParser pSimpleType [
@@ -167,10 +176,7 @@ pSimpleType =
 pTupleType :: Parser ctx Type
 pTupleType = do
     es <- pList (symbol "(") pType (symbol ")")
-    return $ foldr foldTup (TUnit) es
-    where 
-        foldTup l TUnit = l
-        foldTup l r = TPair l r
+    return $ tPairFold es
 
 
 parseExpr internals = parse (runReaderT (sc *> pExpr <* eof) internals)

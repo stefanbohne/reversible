@@ -90,7 +90,7 @@ test_parseTuple = do
     parse_test "()" (ELit VUnit)
     parse_test "(a)" (EVar "a")
     parse_test "(1,b)" (EPair (ELit $ VInt 1) (EVar "b"))
-    parse_test "(1,2,3,4)" (EPair (ELit $ VInt 1) (EPair (ELit $ VInt 2) (EPair (ELit $ VInt 3) (ELit $ VInt 4))))
+    parse_test "(1,2,3,4)" (ePairFold [ELit $ VInt 1, ELit $ VInt 2, ELit $ VInt 3, ELit $ VInt 4])
 
 test_parseList = do
     parse_test "[]" (ELit $ VList [])
@@ -106,7 +106,8 @@ test_parseList = do
     parse_test "[[[]]]" (ECons (ECons (ELit $ VList []) (ELit $ VList [])) (ELit $ VList []))
     
 test_parseFix = do
-    parse_test "\\\\x => x" (EFix (ELam (EVar "x") (EVar "x")))
+    parse_test "fix()" (EFix [])
+    parse_test "fix(x: Int = y, y: Int = x)" (EFix [("x", TInt, EVar "y"), ("y", TInt, EVar "x")])
 
 test_parseLet = do
     parse_test "let 1=2; 3=4 in 5" (ECaseOf (ELit $ VInt 2) [(ELit $ VInt 1, ECaseOf (ELit $ VInt 4) [(ELit $ VInt 3, ELit $ VInt 5)])])

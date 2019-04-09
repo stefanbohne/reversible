@@ -70,11 +70,15 @@ test_app = do
     
 test_lam = do
     tcTest "\\x:Int => x" (JFun, "Int <=> Int")
+    tcTest "\\x:Int => &x" (JFun, "Int -> Int")
     tcTest "\\x:Int => 1" (JFun, "Int -> Int")
     tcTest "(\\x => x) : Int -> Int" (JFun, "Int -> Int")
     tcTestFail "\\x => x"
     tcTest "\\x: Int => \\y: [Int] => y" (JFun, "Int -> [Int] <=> [Int]")
     tcTest "\\f: Int <=> Int => \\f(x) => x" (JFun, "Int <=> Int -> Int <=> Int")
+    tcTestFail "\\f: Int -> Int <=> Int => \\x: Int => f(&x)(x)"
+    tcTest "\\f: Int -> Int <=> Int => \\x: Int => f(x)(&x)" (JFun, "(Int -> Int <=> Int) -> Int -> Int")
+    tcTest "\\f: Int -> Int <=> Int => \\x: Int => f(&x)(&x)" (JFun, "(Int -> Int <=> Int) -> Int -> Int")
 
 test_dup = do
     tcTest "&1" (JRev, "Int")
@@ -96,11 +100,12 @@ test_list = do
     tcTest "\\x: Int => [&x, x]" (JFun, "Int <=> [Int]")
 
 test_fix = do
-    tcTest "\\\\x: Int => 1" (JFun, "Int")
-    tcTest "\\\\x: Int => x" (JFun, "Int")
-    tcTest "\\\\f: Int <=> Int => \\x: Int => f(x + 1)" (JFun, "Int <=> Int")
-    tcTestFail "\\\\f: Int <=> Int => \\x: Int => f(&x + 1)"
-    tcTest "\\\\append: ([Int], Int) <=> [Int] => \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x)" (JFun, "([Int], Int) <=> [Int]")
+    tcTest "fix()" (JFun, "()")
+    tcTest "fix(x: Int = 1)" (JFun, "Int")
+    tcTest "fix(x: Int = x)" (JFun, "Int")
+    tcTest "fix(f: Int <=> Int = \\x => f(x + 1))" (JFun, "Int <=> Int")
+    tcTestFail "fix(f: Int <=> Int = \\x => f(&x + 1))"
+    tcTest "fix(append: ([Int], Int) <=> [Int] = \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x))" (JFun, "([Int], Int) <=> [Int]")
 
 test_let = do
     tcTest "\\let n = m + 1 in n - 1 => m" (JFun, "Int <=> Int")

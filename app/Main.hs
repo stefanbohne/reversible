@@ -66,9 +66,12 @@ runCmd (LetCmd p v) = do
     env <- lift $ get
     let tenv = mapValues (\(n, (t, v)) -> t) env
     let venv = mapValues (\(n, (t, v)) -> v) env
-    (_, tv, _) <- resultGet $ typeCheckExpr' v tenv True JFun TTop
+    let v' = (case p of
+                ETyped (EVar n) t -> EFix [(n, t, v)]
+                _ -> v)
+    (_, tv, _) <- resultGet $ typeCheckExpr' v' tenv True JFun TTop
     (_, _, tenv') <- resultGet $ typeCheckExpr' p tenv False JRev tv
-    v <- resultGet $ evalExpr' v venv
+    v <- resultGet $ evalExpr' v' venv
     venv' <- resultGet $ patternMatchExpr' p v (venv :: EvalContext IndexList)
     env' <- resultGet $ mapValuesM (\(n, t) -> do
         v <- lookup venv' n
@@ -93,12 +96,9 @@ runCmd (LoadCmd f) = do
         Right text -> case parseFile internals f text of
             Left err -> liftIO $ putStrLn $ errorBundlePretty err
             Right lets -> do
-                --let p = foldr EPair (ELit VUnit) $ map (\(n, t, _) -> ETyped (EVar n) t) lets
-                --let v = foldr EPair (ELit VUnit) $ map (\(_, t, v) -> ETyped v t) lets
-                --liftIO $ putStrLn $ show $ EFix (ELam p v)
-                --runCmd (LetCmd p (EFix (ELam p v)))
-                forM lets $ \(n, t, v) ->
-                    runCmd (LetCmd (EVar n) (EFix (ELam (ETyped (EVar n) t) (ETyped v t))))
+                let p = ePairFold $ map (\(n, t, _) -> ETyped (EVar n) t) lets
+                let vs = EFix lets
+                runCmd (LetCmd p vs)
                 return ()
         Left exc ->
             liftIO $ putStrLn $ "Error opening '" ++ f ++ "': " ++ show (exc :: IOException)
