@@ -152,7 +152,10 @@ typeCheck1 (EApp f a) fw j t = do
 typeCheck1 (ERev f) fw j t = do
     (jf', tf, vsf) <- typeCheck f True JFun (if fw then TTop else TBottom)
     (jf, atf, rtf) <- lift $ getFunType tf
-    return (jf', TFun jf rtf atf, vsf)    
+    if jf `leq` JRev then
+        return (jf', TFun jf rtf atf, vsf)    
+    else
+        lift $ Rejected $ "Expected reversible function, got " ++ show (TFun jf atf rtf)
 
 typeCheck1 (ELam p b) True _ t = do
     (j, at, rt) <- lift $ getFunType t <|> return (JFun, TBottom, TTop)

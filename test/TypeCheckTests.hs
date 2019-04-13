@@ -80,6 +80,10 @@ test_lam = do
     tcTest "\\f: Int -> Int <=> Int => \\x: Int => f(x)(&x)" (JFun, "(Int -> Int <=> Int) -> Int -> Int")
     tcTest "\\f: Int -> Int <=> Int => \\x: Int => f(&x)(&x)" (JFun, "(Int -> Int <=> Int) -> Int -> Int")
 
+test_rev = do
+    tcTest "(\\x: Int => x)~" (JFun, "Int <=> Int")
+    tcTestFail "(\\x: Int => &x)~"
+
 test_dup = do
     tcTest "&1" (JRev, "Int")
     tcTest "\\x: Int => &x" (JFun, "Int -> Int")
