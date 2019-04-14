@@ -15,7 +15,7 @@ import AST
 import Internals
 import Context
 
-type Parser c = ReaderT (c String Value) (Parsec String Text)
+type Parser c = ReaderT (c Name Value) (Parsec String Text)
 
 instance ShowErrorComponent String where
     showErrorComponent err = err
@@ -66,7 +66,7 @@ pChar = lexeme $ char '\'' >> L.charLiteral <* (char '\'')
 pExprTerm :: Parser c Expr
 pExprTerm = 
         pExprFix
-    <|> EVar <$> pIdent
+    <|> EVar <$> User <$> pIdent
     <|> (ELit . VInt) <$> pInt
     <|> (ELit . VString) <$> pString
     <|> (ELit . VChar) <$> pChar
@@ -81,7 +81,7 @@ pTupleExpr = do
 pExprFix = do
     try $ operator "fix"
     es <- pList (symbol "(") (do
-        n <- try pIdent
+        n <- User <$> try pIdent
         operator ":"
         t <- pType
         operator "="

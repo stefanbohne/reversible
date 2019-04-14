@@ -14,7 +14,7 @@ import qualified Internals
 import Internals hiding (internals)
 import Context
 
-internals :: IndexList String Value
+internals :: IndexList Name Value
 internals = Internals.internals
 
 evalTest :: Text -> Value -> IO ()
@@ -32,11 +32,11 @@ evalTestRejected src = do
         
 test_internals = 
     forM (unIndexList internals) $ \(n, v) ->
-        evalTest (pack n) v
+        evalTest (pack $ show n) v
 
 test_lit = do
     evalTest "10" $ VInt 10
-    evalTest "\\x => x" $ VFun (EVar "x") (EVar "x")
+    evalTest "\\x => x" $ VFun (EVar $ User "x") (EVar $ User "x")
 
 test_arithmatic = do
     evalTest "1+2" $ VInt 3
@@ -44,7 +44,7 @@ test_arithmatic = do
     evalTest "5 / 2" $ VInt 2
 
 test_lambda = do
-    evalTest "(\\x => \\y => y) (21)" $ VFun (EVar "y") (EVar "y")
+    evalTest "(\\x => \\y => y) (21)" $ VFun (EVar $ User "y") (EVar $ User "y")
     evalTest "(\\1 => 2) (1)" $ VInt 2
     evalTestRejected "(\\1 => 1) (2)"
 

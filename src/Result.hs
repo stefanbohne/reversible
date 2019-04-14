@@ -4,7 +4,7 @@ import Control.Applicative
 import Control.Monad.Fail
 import Control.Monad.Fix
 import Control.Monad.Reader
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Data.Monoid
 import qualified Debug.Trace
 
@@ -111,3 +111,19 @@ msgNewLine line (Rejected msg) = Rejected (msg ++ "\n" ++ line)
 msgNewLine line (Error msg) = Error (msg ++ "\n" ++ line)
 msgNewLine line (TypeError msg) = TypeError (msg ++ "\n" ++ line)
 msgNewLine _ r = r
+
+lift1 :: (Result a -> Result b) -> (StateT s Result a -> StateT s Result b)
+lift1 f term = StateT run 
+    where 
+        run s = run' s (runStateT term s)
+        run' s (Success (a, b)) = do
+            a' <- f (Success a)
+            return (a', b)
+        run' s (Rejected msg) = tmp s $ f (Rejected msg)
+        run' s (Error msg) = tmp s $ f (Error msg)
+        run' s  (TypeError msg) = tmp s $ f (TypeError msg)
+        tmp s (Success a) = Success (a, s)
+        tmp s (Rejected msg) = Rejected msg
+        tmp s (Error msg) = Error msg
+        tmp s (TypeError msg) = TypeError msg
+            

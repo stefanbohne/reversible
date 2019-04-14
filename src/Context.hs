@@ -5,7 +5,7 @@ import Debug.Trace
 import Data.List (find, filter)
 
 class Context c where
-    lookup :: (Eq k) => c k v -> k -> Result v
+    lookup :: (Eq k, Show k) => c k v -> k -> Result v
     update :: c k v -> k -> v -> (c k v)
     remove :: (Eq k) => c k v -> k -> c k v
     isEmpty :: c k v -> Bool
@@ -14,13 +14,12 @@ class Context c where
     mapValues :: ((k, v) -> v') -> c k v -> c k v'
     mapValuesM :: (Monad m) => ((k, v) -> m v') -> c k v -> m (c k v')
     joinValues :: (Show k, Show v, Eq k) => (v -> v -> v) -> (c k v) -> (c k v) -> (Bool, c k v)
+    joinValuesM :: (Monad m, Eq k) => (v -> v -> m v) -> (c k v) -> (c k v) -> m (Bool, c k v)
     without :: (Eq k) => c k v -> [k] -> c k v
-instance (Context c) => Functor (c a) where
-    fmap f = mapValues (\(k, v) -> f v)
 newtype IndexList a b = IndexList { unIndexList :: [(a, b)] }
     deriving (Eq, Show)
 instance Context IndexList where
-    lookup (IndexList c) k = asResult "Undefined" $ Prelude.lookup k c
+    lookup (IndexList c) k = asResult ("Undefined " ++ show k) $ Prelude.lookup k c
     update (IndexList c) k v = IndexList $ (k, v) : c
     remove (IndexList c) k = IndexList $ filter (\(k', _) -> k' /= k) c
     keys (IndexList c) = map (\(k, v) -> k) c
@@ -34,6 +33,15 @@ instance Context IndexList where
         case Prelude.lookup k l of
             Just v2 -> (full, IndexList $ (k, f v v2) : unIndexList joined)
             Nothing -> (False, joined)
+    joinValuesM f (IndexList []) (IndexList r) = return (null r, IndexList [])
+    joinValuesM f (IndexList ((k, v) : r)) (IndexList l) = do
+        (full, joined) <- joinValuesM f (IndexList r) (IndexList l)
+        case Prelude.lookup k l of
+            Just v2 -> do
+                v' <- f v v2
+                return (full, IndexList $ (k, v') : unIndexList joined)
+            Nothing -> 
+                return (False, joined)
     without (IndexList c) ks = IndexList $ filter (\(k, _) -> find (== k) ks == Nothing) c
 instance Semigroup (IndexList a b) where
     (IndexList a) <> (IndexList b) = IndexList $ a <> b

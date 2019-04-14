@@ -14,9 +14,9 @@ import qualified Internals
 import Internals hiding (internals)
 import Context
 
-internals :: IndexList String Value
+internals :: IndexList Name Value
 internals = Internals.internals
-internalTypes :: IndexList String Type
+internalTypes :: IndexList Name Type
 internalTypes = mapValues (typeOfLit True . snd) internals
 
 tcTest :: Text -> (JanusClass, Text) -> IO ()

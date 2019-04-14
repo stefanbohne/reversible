@@ -22,9 +22,9 @@ import Result
 import Context
 import qualified Internals
 
-type ReplContext = IndexList String (Type, Value)
+type ReplContext = IndexList Name (Type, Value)
 type Repl a = HaskelineT (StateT ReplContext IO) a
-internals :: IndexList String Value
+internals :: IndexList Name Value
 internals = Internals.internals
 
 resultPretty :: Result String -> String
@@ -87,7 +87,7 @@ runCmd (TypeCmd e) = do
 runCmd (ListCmd) = do
     env <- lift $ get
     _ <- mapValuesM (\(n, (t, v)) -> do
-        _ <- liftIO $ putStrLn $ n ++ " = " ++ show v
+        _ <- liftIO $ putStrLn $ show n ++ " = " ++ show v
         return ()) env
     return ()
 runCmd (LoadCmd f) = do
@@ -96,8 +96,8 @@ runCmd (LoadCmd f) = do
         Right text -> case parseFile internals f text of
             Left err -> liftIO $ putStrLn $ errorBundlePretty err
             Right lets -> do
-                let p = ePairFold $ map (\(n, t, _) -> ETyped (EVar n) t) lets
-                let vs = EFix lets
+                let p = ePairFold $ map (\(n, t, _) -> ETyped (EVar $ User n) t) lets
+                let vs = EFix $ map (\(n, t, e) -> (User n, t, e)) lets
                 runCmd (LetCmd p vs)
                 return ()
         Left exc ->

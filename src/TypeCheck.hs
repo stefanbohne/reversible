@@ -21,21 +21,6 @@ gt a b = not (a `leq` b)
 lt :: PartialOrd a => a -> a -> Bool
 lt a b = b `gt` a
 
-lift1 :: (Result a -> Result b) -> (StateT s Result a -> StateT s Result b)
-lift1 f term = StateT run 
-    where 
-        run s = run' s (runStateT term s)
-        run' s (Success (a, b)) = do
-            a' <- f (Success a)
-            return (a', b)
-        run' s (Rejected msg) = tmp s $ f (Rejected msg)
-        run' s (Error msg) = tmp s $ f (Error msg)
-        run' s  (TypeError msg) = tmp s $ f (TypeError msg)
-        tmp s (Success a) = Success (a, s)
-        tmp s (Rejected msg) = Rejected msg
-        tmp s (Error msg) = Error msg
-        tmp s (TypeError msg) = TypeError msg
-            
 
 getJanusClass :: JanusClass -> JanusClass -> Result ()
 getJanusClass jc jclower = 
@@ -54,7 +39,7 @@ getListType :: Type -> Result Type
 getListType (TList t) = Success t
 getListType t = Rejected $ "expected list type but got " ++ show t
 
-type TCContext c = (c String Type, c  String Type)
+type TCContext c = (c Name Type, c Name Type)
 type TCMonad c = StateT (TCContext c) Result
 
 par :: (Context c) => (Type -> Type -> Type) -> TCMonad c a -> TCMonad c b -> TCMonad c (Bool, a, b)
@@ -69,7 +54,7 @@ par f l r = do
     put (nonlin, lin)
     return (full, l, r)
 
-localNonLin :: (Context c, Monoid (c String Type)) => TCMonad c a -> TCMonad c a
+localNonLin :: (Context c, Monoid (c Name Type)) => TCMonad c a -> TCMonad c a
 localNonLin a = do
     (nonlin, lin) <- get
     _ <- put (nonlin <> lin, mempty)
@@ -77,30 +62,30 @@ localNonLin a = do
     put (nonlin, lin)
     return v
 
-getVar :: (Context c) => String -> TCMonad c (Bool, Type)
+getVar :: (Context c) => Name -> TCMonad c (Bool, Type)
 getVar n = do
     (nonlin, lin) <- get
     lift $ ((True, ) <$> lookup lin n) <|> ((False, ) <$> lookup nonlin n)
             
-pushVar :: (Context c) => String -> Type -> TCMonad c ()
+pushVar :: (Context c) => Name -> Type -> TCMonad c ()
 pushVar n t = do
     (nonlin, lin) <- get
     put (nonlin, update lin n t)
     return ()
 
-popVar :: (Context c, Monoid (c String Type)) => String -> TCMonad c ()
+popVar :: (Context c, Monoid (c Name Type)) => Name -> TCMonad c ()
 popVar n = do
     (nonlin, lin) <- get
     let lin' = remove lin n
     _ <- put (nonlin, lin')
     return ()
              
-typeCheckExpr' :: (Context c, Monoid (c String Type)) => Expr -> c String Type -> Bool -> JanusClass -> Type -> Result (JanusClass, Type, c String Type)
+typeCheckExpr' :: (Context c, Monoid (c Name Type)) => Expr -> c Name Type -> Bool -> JanusClass -> Type -> Result (JanusClass, Type, c Name Type)
 typeCheckExpr' e ctx fw j t = required $ do
     ((j, t, _), (nonlin, lin)) <- runStateT (typeCheck e fw j t) (ctx, mempty)
     return (j, t, lin)
                  
-typeCheck :: (Context c, Monoid (c String Type)) => Expr -> Bool -> JanusClass -> Type -> TCMonad c (JanusClass, Type, [String])
+typeCheck :: (Context c, Monoid (c Name Type)) => Expr -> Bool -> JanusClass -> Type -> TCMonad c (JanusClass, Type, [Name])
 typeCheck e fw j t = lift1 (msgNewLine $ "while checking " ++ show e ++ " : " ++ show j ++ " " ++ show t) $ do
     (j', t', vs') <- typeCheck1 e fw j t
     if j' `gt` j then
@@ -116,7 +101,7 @@ typeCheck e fw j t = lift1 (msgNewLine $ "while checking " ++ show e ++ " : " ++
         else
             return (j', t', vs')
             
-typeCheck1 :: (Context c, Monoid (c String Type)) => Expr -> Bool -> JanusClass -> Type -> TCMonad c (JanusClass, Type, [String])
+typeCheck1 :: (Context c, Monoid (c Name Type)) => Expr -> Bool -> JanusClass -> Type -> TCMonad c (JanusClass, Type, [Name])
 typeCheck1 (ELit l) fw _ _ = do
     let t = typeOfLit fw l
     return (lin2jc $ isEquType $ typeOfLit True l, t, [])
@@ -133,9 +118,9 @@ typeCheck1 (EVar n) True _ _ = do
     else 
         return (lin2jc $ isEquType tv, tv, [n])
 typeCheck1 (EVar n) False _ TBottom = 
-    lift $ Rejected $ "Variable pattern '" ++ n ++ "' needs type annotation"
+    lift $ Rejected $ "Variable pattern '" ++ show n ++ "' needs type annotation"
 typeCheck1 (EVar n) False _ t = do
-    _ <- lift1 (expectRejected ("Variable '" ++ n ++ "' already defined")) (getVar n)
+    _ <- lift1 (expectRejected ("Variable '" ++ show n ++ "' already defined")) (getVar n)
     pushVar n t
     return (JRev, t, [n])
 
@@ -147,7 +132,7 @@ typeCheck1 (EApp f a) fw j t = do
     (_, lin2) <- get
     case keys (without lin1 (keys lin2)) `intersect` vsf of
         [] -> return (ja \/ jf, rtf, vsf ++ vsa)
-        n:_ -> lift $ Rejected $ "Variable '" ++ n ++ "' is used in function and linearly in argument"
+        n:_ -> lift $ Rejected $ "Variable '" ++ show n ++ "' is used in function and linearly in argument"
 
 typeCheck1 (ERev f) fw j t = do
     (jf', tf, vsf) <- typeCheck f True JFun (if fw then TTop else TBottom)

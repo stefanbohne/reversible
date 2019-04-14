@@ -10,10 +10,10 @@ import AST
 import Result
 import Context
 
-type EvalContext c = c String Value
+type EvalContext c = c Name Value
 type EvalMonad c = ReaderT (EvalContext c) Result
 
-unfix :: (Context c, Monoid (c String Value)) => Value -> EvalMonad c Value
+unfix :: (Context c, Monoid (c Name Value)) => Value -> EvalMonad c Value
 unfix (VFix e es) = do
     local (\env -> foldl (\env (n, t, e) -> update env n (VFix e es)) mempty es) $ eval e
 unfix v = return v
@@ -37,15 +37,15 @@ checkCons (VFix _ _) = error "missing unfix"
 checkCons v@(VList []) = TypeError $ (show v) ++ " is not a non-empty list"
 checkCons v = Rejected $ (show v) ++ " is not a list"
 
-evalExpr' :: (Context c, Monoid (c String Value)) => Expr -> EvalContext c -> Result Value
+evalExpr' :: (Context c, Monoid (c Name Value)) => Expr -> EvalContext c -> Result Value
 evalExpr' expr ctx = runReaderT (eval expr) ctx
-patternMatchExpr' :: (Context c, Monoid (c String Value)) => Expr -> Value -> EvalContext c -> Result (EvalContext c)
+patternMatchExpr' :: (Context c, Monoid (c Name Value)) => Expr -> Value -> EvalContext c -> Result (EvalContext c)
 patternMatchExpr' expr v ctx = runReaderT (patternMatch expr v) ctx
 
-eval :: (Context c, Monoid (c String Value)) => Expr -> EvalMonad c Value
+eval :: (Context c, Monoid (c Name Value)) => Expr -> EvalMonad c Value
 eval e = eval1 e >>= unfix 
 
-eval1 :: (Context c, Monoid (c String Value)) => Expr -> EvalMonad c Value
+eval1 :: (Context c, Monoid (c Name Value)) => Expr -> EvalMonad c Value
 eval1 (ELit l) =  
     return l
 eval1 (EVar n) = do
@@ -103,7 +103,7 @@ eval1 (ECaseOf e cs) = do
             local (const env) $ eval v)
     foldr (<|>) (lift $ Rejected "All cases rejected") cs'
 
-patternMatch :: (Context c, Monoid (c String Value)) => Expr -> Value -> EvalMonad c (EvalContext c)
+patternMatch :: (Context c, Monoid (c Name Value)) => Expr -> Value -> EvalMonad c (EvalContext c)
 patternMatch (ELit l2) l1 | l1 == l2 = ask
                           | otherwise = lift $ Rejected $ "Mismatch: " ++ show l2 ++ " != " ++ show l1
 patternMatch (EVar n) v = do

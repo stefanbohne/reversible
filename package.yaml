@@ -30,19 +30,19 @@ dependencies:
 data-files:
 - prelude.rev 
 
+default-extensions: 
+- FlexibleInstances
+- LambdaCase
+- MultiWayIf 
+- OverloadedStrings
+- GADTs
+- KindSignatures
+- ExplicitForAll
+- TupleSections
+- ScopedTypeVariables
+
 library:
   source-dirs: src
-  ghc-options:
-  - -XFlexibleInstances
-  - -XLambdaCase
-  - -XMultiWayIf 
-  - -XDatatypeContexts
-  - -XOverlappingInstances
-  - -XOverloadedStrings
-  - -XGADTs
-  - -XKindSignatures
-  - -XExplicitForAll
-  - -XTupleSections
 
 executables:
   thesis-exe:
@@ -52,8 +52,6 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -XOverlappingInstances
-    - -XOverloadedStrings
     dependencies:
     - reversible
     - repline
@@ -67,13 +65,6 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -XFlexibleInstances
-    - -XLambdaCase
-    - -XMultiWayIf 
-    - -XDatatypeContexts
-    - -XOverlappingInstances
-    - -XOverloadedStrings
-    - -XGADTs
     dependencies:
     - reversible
     - HTF

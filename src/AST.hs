@@ -1,12 +1,23 @@
 module AST where
 
-import Data.List
+import Prelude hiding (lookup)
+import qualified Data.List
 import Algebra.Lattice
 import Algebra.PartialOrd
 import Control.Applicative
 import Control.Monad.Reader
+import Control.Monad.State.Strict
 
 import Result
+import Context
+
+data Name = User String
+          | Auto String Int
+          deriving (Eq)
+instance Show Name where
+    show (User n) = n
+    show (Auto n i) = n ++ "$" ++ show i
+
 
 data JanusClass = JFun | JRev
     deriving (Eq)
@@ -97,7 +108,7 @@ data Value =
     |   VList [Value]
     |   VLitFun JanusClass Type Type String (Value -> Result Value) String (Value -> Result Value)
     |   VFun Expr Expr
-    |   VFix Expr [(String, Type, Expr)]
+    |   VFix Expr [(Name, Type, Expr)]
 instance Show Value where
     show (VInt i) = show i
     show (VBool b) = show b
@@ -108,7 +119,7 @@ instance Show Value where
     show (VFix e es) = show e
     show (VPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (VUnit) = "()"
-    show (VList l) = "[" ++ (intercalate ", " $ map show l) ++ "]"
+    show (VList l) = "[" ++ (Data.List.intercalate ", " $ map show l) ++ "]"
 instance Eq Value where
     (VInt i1) == (VInt i2) = i1 == i2
     (VBool b1) == (VBool b2) = b1 == b2
@@ -140,20 +151,21 @@ typeOfLit fw (VList (x : _)) = TList (typeOfLit fw x)
 
 data Expr = 
         ELit Value
-    |   EVar String 
+    |   EVar Name 
     |   EApp Expr Expr
     |   ELam Expr Expr
+    |   ETLam Name Expr
     |   ETyped Expr Type
     |   EPair Expr Expr
     |   ECaseOf Expr [(Expr, Expr)]
     |   EDup Expr
     |   ERev Expr
     |   ECons Expr Expr
-    |   EFix [(String, Type, Expr)]
+    |   EFix [(Name, Type, Expr)]
     deriving (Eq)
 instance Show Expr where
     show (ELit v) = show v
-    show (EVar n) = n
+    show (EVar n) = show n
     show (EDup e) = "&(" ++ show e ++ ")"
     show (EApp f a) = show f ++ "(" ++ show a ++ ")"
     show (ERev f) = show f ++ "~"
@@ -161,19 +173,19 @@ instance Show Expr where
     show (ETyped e t) = "(" ++ show e ++ "): " ++ show t
     show (EPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (ECons x r) = "(" ++ show x ++ " :: " ++ show r ++ ")"
-    show (EFix es) = "fix(" ++ intercalate ", " (map (\(n, t, e) -> n ++ ": " ++ show t ++ " = " ++ show e) es) ++ ")"
+    show (EFix es) = "fix(" ++ Data.List.intercalate ", " (map (\(n, t, e) -> show n ++ ": " ++ show t ++ " = " ++ show e) es) ++ ")"
     show (ECaseOf e [(p, v)]) = "let " ++ show p ++ " = " ++ show e ++ " in " ++ show v
     show (ECaseOf e cs) = "case " ++ show e ++ " of " ++ 
-            (intercalate " " $ map (\(p, v) -> show p ++ " => " ++ show v ++ ";") cs)
+            (Data.List.intercalate " " $ map (\(p, v) -> show p ++ " => " ++ show v ++ ";") cs)
 ePairFold :: [Expr] -> Expr
 ePairFold vs = foldr f (ELit $ VUnit) vs
     where f l (ELit VUnit) = l
           f l r@(EPair _ _) = EPair l r
           f l r = EPair l r
             
-subst :: (Alternative m, Monad m) => (String -> m Expr) -> Expr -> m Expr
+subst :: (Alternative m, Monad m) => (Name -> m Expr) -> Expr -> m Expr
 subst f e = runReaderT (subst_ e) f
-subst_ :: (Alternative m, Monad m) => Expr -> ReaderT (String -> m Expr) m Expr 
+subst_ :: (Alternative m, Monad m) => Expr -> ReaderT (Name -> m Expr) m Expr 
 subst_ (ELit v) =
     return $ ELit v
 subst_ (EVar n) = do

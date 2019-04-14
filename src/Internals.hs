@@ -76,5 +76,5 @@ _internals = [
     VBool False, 
     opSplitAt
     ]
-internals :: (Context c, Monoid (c String Value)) => c String Value
-internals = mkContext $ map (\v -> (show v, v)) _internals
+internals :: (Context c, Monoid (c Name Value)) => c Name Value
+internals = mkContext $ map (\v -> (User $ show v, v)) _internals
