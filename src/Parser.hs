@@ -158,25 +158,25 @@ pExprLam = (do
     return $ ELam p b) <|> pExprCase
 pExpr = pExprLam
 
-pType :: Parser ctx Type
+pType :: Parser ctx Expr
 pType = makeExprParser pSimpleType [
-        [binOp InfixN "<=>" (TFun JRev)],
-        [binOp InfixR "->" (TFun JFun)]
+        [binOp InfixN "<=>" (EFunType JRev)],
+        [binOp InfixR "->" (EFunType JFun)]
     ]
-pSimpleType :: Parser ctx Type
+pSimpleType :: Parser ctx Expr
 pSimpleType =
-        TInt <$ symbol "Int"
-    <|> TBool <$ symbol "Bool"
-    <|> TString <$ symbol "String"
-    <|> TChar <$ symbol "Char"
-    <|> TTop <$ symbol "Top"
-    <|> TBottom <$ symbol "Bottom"
+        (ELit $ VType TInt) <$ symbol "Int"
+    <|> (ELit $ VType TBool) <$ symbol "Bool"
+    <|> (ELit $ VType TString) <$ symbol "String"
+    <|> (ELit $ VType TChar) <$ symbol "Char"
+    <|> (ELit $ VType TTop) <$ symbol "Top"
+    <|> (ELit $ VType TBottom) <$ symbol "Bottom"
     <|> pTupleType
-    <|> (symbol "[") *> (TList <$> pType) <* (symbol "]")
-pTupleType :: Parser ctx Type
+    <|> (symbol "[") *> (EListType <$> pType) <* (symbol "]")
+pTupleType :: Parser ctx Expr
 pTupleType = do
     es <- pList (symbol "(") pType (symbol ")")
-    return $ tPairFold es
+    return $ ePairTypeFold es
 
 
 parseExpr internals = parse (runReaderT (sc *> pExpr <* eof) internals)

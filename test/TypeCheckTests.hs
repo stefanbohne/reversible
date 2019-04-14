@@ -10,6 +10,7 @@ import Parser
 import AST
 import Result
 import TypeCheck
+import Eval
 import qualified Internals
 import Internals hiding (internals)
 import Context
@@ -23,7 +24,8 @@ tcTest :: Text -> (JanusClass, Text) -> IO ()
 tcTest src (expectedJ, expectedSrc) = do
     case parseExpr internals "<src>" src of
         Right expr -> case parseType internals "<expectedSrc>" expectedSrc of
-            Right expectedT -> tcTestExpr expr (expectedJ, expectedT)
+            Right expectedT -> case evalExpr' expectedT (mempty :: IndexList Name Value) of
+                Success (VType expectedT) -> tcTestExpr expr (expectedJ, expectedT)
             Left err -> fail $ errorBundlePretty err
         Left err -> fail $ errorBundlePretty err
 tcTestExpr :: Expr -> (JanusClass, Type) -> IO ()

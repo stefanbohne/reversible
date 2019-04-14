@@ -37,6 +37,10 @@ checkCons (VFix _ _) = error "missing unfix"
 checkCons v@(VList []) = TypeError $ (show v) ++ " is not a non-empty list"
 checkCons v = Rejected $ (show v) ++ " is not a list"
 
+checkType (VType t) = Success t
+checkType (VFix _ _) = error "missing unfix"
+checkType v = Rejected $ (show v) ++ " is not a type"
+
 evalExpr' :: (Context c, Monoid (c Name Value)) => Expr -> EvalContext c -> Result Value
 evalExpr' expr ctx = runReaderT (eval expr) ctx
 patternMatchExpr' :: (Context c, Monoid (c Name Value)) => Expr -> Value -> EvalContext c -> Result (EvalContext c)
@@ -91,7 +95,9 @@ eval1 (EFix es) = do
     env <- ask
     let f n = (ELit <$> lookup env n) <|> (return $ EVar n)
     es <- forM es $ \(n, t, e) -> do
-        e <- lift$ subst f e
+        t <- eval t
+        t <- lift $ typeRequired $ checkType t
+        e <- lift $ subst f e
         return (n, t, e)
     vs <- forM es $ \(n, t, e) ->
         return $ VFix e es 
@@ -102,6 +108,17 @@ eval1 (ECaseOf e cs) = do
             env <- patternMatch p ve
             local (const env) $ eval v)
     foldr (<|>) (lift $ Rejected "All cases rejected") cs'
+eval1 (EFunType j at rt) = do
+    at' <- eval at >>= lift . checkType
+    rt' <- eval rt >>= lift . checkType
+    return $ VType $ TFun j at' rt'
+eval1 (EPairType a b) = do
+    a' <- eval a >>= lift . checkType
+    b' <- eval b >>= lift . checkType
+    return $ VType $ TPair a' b'
+eval1 (EListType t) = do
+    t' <- eval t >>= lift . checkType
+    return $ VType $ TList t'
 
 patternMatch :: (Context c, Monoid (c Name Value)) => Expr -> Value -> EvalMonad c (EvalContext c)
 patternMatch (ELit l2) l1 | l1 == l2 = ask

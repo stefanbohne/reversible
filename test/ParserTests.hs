@@ -65,24 +65,24 @@ test_parseFun = do
     parse_test "\\x => 1" (ELam (EVar $ User "x") (ELit $ VInt 1))
     parse_test " \\ x + y => 2 * 3" (ELam (bin opPlus (EVar $ User "y") (EVar $ User "x")) (bin opMul (ELit $ VInt 3) (ELit $ VInt 2)))
     parse_test "\\x => \\y => x" (ELam (EVar $ User "x") (ELam (EVar $ User "y") (EVar $ User "x")))
-    parse_test "\\x : Int => x : Int" (ELam (ETyped (EVar $ User "x") TInt) (ETyped (EVar $ User "x") TInt))
+    parse_test "\\x : Int => x : Int" (ELam (ETyped (EVar $ User "x") (ELit $ VType TInt)) (ETyped (EVar $ User "x") (ELit $ VType TInt)))
     parse_test "\\f(x) => f(x)" (ELam (EApp (EVar $ User "f") (EVar $ User "x")) (EApp (EVar $ User "f") (EVar $ User "x")))
     parse_test "(\\a => b)(c)" (EApp (ELam (EVar $ User "a") (EVar $ User "b")) (EVar $ User "c"))
 
 test_parseType = do
-    parse_test "x : Int" (ETyped (EVar $ User "x") TInt)
-    parse_test "x : Int -> (Int) <=> ()" (ETyped (EVar $ User "x") (TFun JFun TInt (TFun JRev TInt TUnit)))
-    parse_test "x : Int <=> [Bool] -> (String, Char)" (ETyped (EVar $ User "x") (TFun JFun (TFun JRev TInt (TList TBool)) (TPair TString TChar)))
+    parse_test "x : Int" (ETyped (EVar $ User "x") (ELit $ VType TInt))
+    parse_test "x : Int -> (Int) <=> ()" (ETyped (EVar $ User "x") (EFunType JFun (ELit $ VType TInt) (EFunType JRev (ELit $ VType TInt) (ELit $ VType TUnit))))
+    parse_test "x : Int <=> [Bool] -> (String, Char)" (ETyped (EVar $ User "x") (EFunType JFun (EFunType JRev (ELit $ VType TInt) (EListType (ELit $ VType TBool))) (EPairType (ELit $ VType TString) (ELit $ VType TChar))))
 
 test_parseTyped = do
-    parse_test "x + y : Int" (bin opPlus (ETyped (EVar $ User "y") TInt) (EVar $ User "x"))
-    parse_test "x : Int -> Int" (ETyped (EVar $ User "x") (TFun JFun TInt TInt))
+    parse_test "x + y : Int" (bin opPlus (ETyped (EVar $ User "y") (ELit $ VType TInt)) (EVar $ User "x"))
+    parse_test "x : Int -> Int" (ETyped (EVar $ User "x") (EFunType JFun (ELit $ VType TInt) (ELit $ VType TInt)))
 
 test_parseDup = do
     parse_test "&x" (EDup (EVar $ User "x"))
     parse_test "&[]" (EDup (ELit $ VList []))
     parse_test "&123" (EDup (ELit $ VInt 123))
-    parse_test "&x:Int" (ETyped (EDup (EVar $ User "x")) TInt)
+    parse_test "&x:Int" (ETyped (EDup (EVar $ User "x")) (ELit $ VType TInt))
     parse_test "&x+y" (bin opPlus (EVar $ User "y") (EDup (EVar $ User "x")))
     parse_test "&f(&x)" (EApp (EDup (EVar $ User "f")) (EDup (EVar $ User "x")))
 
@@ -100,14 +100,14 @@ test_parseList = do
     parse_test "a::b" (ECons (EVar $ User "a") (EVar $ User "b"))
     parse_test "\\a+1::b:Int::c=>d:Int::e" (
         ELam(ECons (EApp (EApp (ELit opPlus) (ELit $ VInt 1)) (EVar $ User "a")) (
-             ECons (ETyped (EVar $ User "b") TInt) (EVar $ User "c")))
-            (ECons (ETyped (EVar $ User "d") TInt) (EVar $ User "e"))
+             ECons (ETyped (EVar $ User "b") (ELit $ VType TInt)) (EVar $ User "c")))
+            (ECons (ETyped (EVar $ User "d") (ELit $ VType TInt)) (EVar $ User "e"))
         )
     parse_test "[[[]]]" (ECons (ECons (ELit $ VList []) (ELit $ VList [])) (ELit $ VList []))
     
 test_parseFix = do
     parse_test "fix()" (EFix [])
-    parse_test "fix(x: Int = y, y: Int = x)" (EFix [(User "x", TInt, EVar $ User "y"), (User "y", TInt, EVar $ User "x")])
+    parse_test "fix(x: Int = y, y: Int = x)" (EFix [(User "x", (ELit $ VType TInt), EVar $ User "y"), (User "y", (ELit $ VType TInt), EVar $ User "x")])
 
 test_parseLet = do
     parse_test "let 1=2; 3=4 in 5" (ECaseOf (ELit $ VInt 2) [(ELit $ VInt 1, ECaseOf (ELit $ VInt 4) [(ELit $ VInt 3, ELit $ VInt 5)])])

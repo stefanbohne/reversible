@@ -10,7 +10,7 @@ import Data.Text (Text)
 import Parser
 import AST
 
-pFileParser :: Parser ctx [(String, Type, Expr)]
+pFileParser :: Parser ctx [(String, Expr, Expr)]
 pFileParser =
     many $ do
         n <- try pIdent

@@ -38,7 +38,7 @@ instance PartialOrd JanusClass where
     
 
 data Type =
-        TInt | TBool | TString | TChar | TTop | TBottom
+        TInt | TBool | TString | TChar | TTop | TBottom | TType
     |   TUnit
     |   TList Type
     |   TFun JanusClass Type Type
@@ -49,6 +49,7 @@ instance Show Type where
     show TBool = "Bool"
     show TString = "String"
     show TChar = "Char"
+    show TType = "Type"
     show (TPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (TUnit) = "()"
     show (TList a) = "[" ++ show a ++ "]"
@@ -109,6 +110,7 @@ data Value =
     |   VLitFun JanusClass Type Type String (Value -> Result Value) String (Value -> Result Value)
     |   VFun Expr Expr
     |   VFix Expr [(Name, Type, Expr)]
+    |   VType Type
 instance Show Value where
     show (VInt i) = show i
     show (VBool b) = show b
@@ -120,6 +122,7 @@ instance Show Value where
     show (VPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (VUnit) = "()"
     show (VList l) = "[" ++ (Data.List.intercalate ", " $ map show l) ++ "]"
+    show (VType t) = show t
 instance Eq Value where
     (VInt i1) == (VInt i2) = i1 == i2
     (VBool b1) == (VBool b2) = b1 == b2
@@ -130,6 +133,7 @@ instance Eq Value where
     (VPair a1 b1) == (VPair a2 b2) = a1 == a2 && b1 == b2
     (VUnit) == (VUnit) = True
     (VList l1) == (VList l2) = l1 == l2
+    (VType t1) == (VType t2) = t1 == t2
     _ == _ = False
 vPairFold :: [Value] -> Value
 vPairFold vs = foldr f VUnit vs
@@ -142,6 +146,7 @@ typeOfLit _ (VInt _) = TInt
 typeOfLit _ (VBool _) = TBool
 typeOfLit _ (VString _) = TString
 typeOfLit _ (VChar _) = TChar
+typeOfLit _ (VType _) = TType
 typeOfLit _ (VLitFun j at rt _ _ _ _) = TFun j at rt
 typeOfLit _ (VFun _ _) = error "runtime-only value"
 typeOfLit fw (VPair a b) = TPair (typeOfLit fw a) (typeOfLit fw b)
@@ -154,14 +159,16 @@ data Expr =
     |   EVar Name 
     |   EApp Expr Expr
     |   ELam Expr Expr
-    |   ETLam Name Expr
-    |   ETyped Expr Type
+    |   EFunType JanusClass Expr Expr
+    |   ETyped Expr Expr
     |   EPair Expr Expr
+    |   EPairType Expr Expr
     |   ECaseOf Expr [(Expr, Expr)]
     |   EDup Expr
     |   ERev Expr
     |   ECons Expr Expr
-    |   EFix [(Name, Type, Expr)]
+    |   EListType Expr
+    |   EFix [(Name, Expr, Expr)]
     deriving (Eq)
 instance Show Expr where
     show (ELit v) = show v
@@ -169,10 +176,13 @@ instance Show Expr where
     show (EDup e) = "&(" ++ show e ++ ")"
     show (EApp f a) = show f ++ "(" ++ show a ++ ")"
     show (ERev f) = show f ++ "~"
-    show (ELam p b) = "\\" ++ show p ++ " -> " ++ show b
+    show (ELam p b) = "\\" ++ show p ++ " => " ++ show b
+    show (EFunType j at rt) = show at ++ " " ++ show j ++ " " ++ show rt
     show (ETyped e t) = "(" ++ show e ++ "): " ++ show t
     show (EPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
+    show (EPairType a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
     show (ECons x r) = "(" ++ show x ++ " :: " ++ show r ++ ")"
+    show (EListType t) = "[" ++ show t ++ "]"
     show (EFix es) = "fix(" ++ Data.List.intercalate ", " (map (\(n, t, e) -> show n ++ ": " ++ show t ++ " = " ++ show e) es) ++ ")"
     show (ECaseOf e [(p, v)]) = "let " ++ show p ++ " = " ++ show e ++ " in " ++ show v
     show (ECaseOf e cs) = "case " ++ show e ++ " of " ++ 
@@ -182,7 +192,12 @@ ePairFold vs = foldr f (ELit $ VUnit) vs
     where f l (ELit VUnit) = l
           f l r@(EPair _ _) = EPair l r
           f l r = EPair l r
-            
+ePairTypeFold :: [Expr] -> Expr
+ePairTypeFold vs = foldr f (ELit (VType TUnit)) vs
+    where f l (ELit (VType TUnit)) = l
+          f l r@(EPairType _ _) = EPairType l r
+          f l r = EPairType l r
+                      
 subst :: (Alternative m, Monad m) => (Name -> m Expr) -> Expr -> m Expr
 subst f e = runReaderT (subst_ e) f
 subst_ :: (Alternative m, Monad m) => Expr -> ReaderT (Name -> m Expr) m Expr 
@@ -199,6 +214,10 @@ subst_ (ELam p b) = do
     p <- subst_ p
     b <- subst_ b
     return $ ELam p b
+subst_ (EFunType j at rt) = do
+    at <- subst_ at
+    rt <- subst_ rt
+    return $ EFunType j at rt
 subst_ (EDup e) = do
     e <- subst_ e
     return $ EDup e
@@ -212,10 +231,17 @@ subst_ (EPair e1 e2) = do
     e1 <- subst_ e1
     e2 <- subst_ e2
     return $ EPair e1 e2
+subst_ (EPairType a b) = do
+    a <- subst_ a
+    b <- subst_ b
+    return $ EPairType a b
 subst_ (ECons e1 e2) = do
     e1 <- subst_ e1
     e2 <- subst_ e2
     return $ ECons e1 e2
+subst_ (EListType t) = do
+    t <- subst_ t
+    return $ EListType t
 subst_ (EFix es) = do
     es <- forM es $ \(n, t, e) -> do e <- subst_ e; return (n, t, e)
     return $ EFix es
