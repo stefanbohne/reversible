@@ -47,7 +47,11 @@ patternMatchExpr' :: (Context c, Monoid (c Name Value)) => Expr -> Value -> Eval
 patternMatchExpr' expr v ctx = runReaderT (patternMatch expr v) ctx
 
 eval :: (Context c, Monoid (c Name Value)) => Expr -> EvalMonad c Value
-eval e = eval1 e >>= unfix 
+--eval e | Debug.Trace.trace (show e ++ " ~>") False = undefined
+eval e = do
+    v <- eval1 e >>= unfix 
+    --Debug.Trace.trace (show e ++ " ~> " ++ show v) $ return ()
+    return v
 
 eval1 :: (Context c, Monoid (c Name Value)) => Expr -> EvalMonad c Value
 eval1 (ELit l) =  
@@ -121,6 +125,7 @@ eval1 (EListType t) = do
     return $ VType $ TList t'
 
 patternMatch :: (Context c, Monoid (c Name Value)) => Expr -> Value -> EvalMonad c (EvalContext c)
+--patternMatch e v | Debug.Trace.trace (show e ++ " <~ " ++ show v) False = undefined
 patternMatch (ELit l2) l1 | l1 == l2 = ask
                           | otherwise = lift $ Rejected $ "Mismatch: " ++ show l2 ++ " != " ++ show l1
 patternMatch (EVar n) v = do
@@ -137,9 +142,8 @@ patternMatch (EApp f a) v = do
     case f' of
         VFun p b -> do
             e' <- patternMatch b v
-            local (const e') $ do
-                p' <- eval p
-                patternMatch a p'
+            p' <- local (const e') $ eval p
+            patternMatch a p'
         VLitFun _ _ _ _ _ _ f -> do
             v' <- lift $ f v
             patternMatch a v'

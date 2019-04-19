@@ -47,6 +47,7 @@ test_lambda = do
     evalTest "(\\x => \\y => y) (21)" $ VFun (EVar $ User "y") (EVar $ User "y")
     evalTest "(\\1 => 2) (1)" $ VInt 2
     evalTestRejected "(\\1 => 1) (2)"
+    evalTest "(\\f: (Int, Int) -> Int => \\x: Int => f(&x + 1, x + 2))(\\(x,y) => x * y)(3)" $ VInt 20
 
 test_rev = do
     evalTest "(\\x: Int => x+1)~(43)" $ VInt 42
@@ -84,6 +85,10 @@ test_fix = do
     evalTest "let fac = fix(fac: Int -> Int = \\n: Int => case n of 0 => 1; n => n * fac(n - 1)) in (fac(0), fac(1), fac(5))" $ vPairFold [VInt 1, VInt 1, VInt 120]
     evalTest "(fix(append: ([Int], Int) <=> [Int] = \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x)))([1,2],3)" $ VList [VInt 1, VInt 2, VInt 3]
     evalTest "(fix(append: ([Int], Int) <=> [Int] = \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x)))~([1,2,3])" $ VPair (VList [VInt 1, VInt 2]) (VInt 3)
+    evalTest "let (append, reverse) = fix(\
+        \append: ([Int], Int) <=> [Int] = \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x), \
+        \reverse: [Int] <=> [Int] = \\l => case l of [] => []; append(reverse(r), x) => x::r) in \
+        \(reverse([1,2,3]), reverse~([1,2,3]))" (VPair (VList [VInt 3, VInt 2, VInt 1]) (VList [VInt 3, VInt 2, VInt 1]))
 
 test_case = do
     evalTest "case 1 of 1 => 2; 2 => 3" $ VInt 2

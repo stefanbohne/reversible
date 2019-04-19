@@ -78,9 +78,6 @@ test_lam = do
     tcTestFail "\\x => x"
     tcTest "\\x: Int => \\y: [Int] => y" (JFun, "Int -> [Int] <=> [Int]")
     tcTest "\\f: Int <=> Int => \\f(x) => x" (JFun, "Int <=> Int -> Int <=> Int")
-    tcTestFail "\\f: Int -> Int <=> Int => \\x: Int => f(&x)(x)"
-    tcTest "\\f: Int -> Int <=> Int => \\x: Int => f(x)(&x)" (JFun, "(Int -> Int <=> Int) -> Int -> Int")
-    tcTest "\\f: Int -> Int <=> Int => \\x: Int => f(&x)(&x)" (JFun, "(Int -> Int <=> Int) -> Int -> Int")
 
 test_rev = do
     tcTest "(\\x: Int => x)~" (JFun, "Int <=> Int")
@@ -90,6 +87,9 @@ test_dup = do
     tcTest "&1" (JRev, "Int")
     tcTest "\\x: Int => &x" (JFun, "Int -> Int")
     tcTest "\\x: Int => \\ &x => ()" (JFun, "Int -> Int <=> ()")
+    tcTestFail "\\f: Int -> Int <=> Int => \\x: Int => f(&x)(x)"
+    tcTest "\\f: Int -> Int <=> Int => \\x: Int => f(x)(&x)" (JFun, "(Int -> Int <=> Int) -> Int -> Int")
+    tcTest "\\f: Int -> Int <=> Int => \\x: Int => f(&x)(&x)" (JFun, "(Int -> Int <=> Int) -> Int -> Int")
 
 test_tuple = do
     tcTest "()" (JRev, "()")

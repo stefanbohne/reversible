@@ -176,7 +176,7 @@ instance Show Expr where
     show (EDup e) = "&(" ++ show e ++ ")"
     show (EApp f a) = show f ++ "(" ++ show a ++ ")"
     show (ERev f) = show f ++ "~"
-    show (ELam p b) = "\\" ++ show p ++ " => " ++ show b
+    show (ELam p b) = "(\\" ++ show p ++ " => " ++ show b ++ ")"
     show (EFunType j at rt) = show at ++ " " ++ show j ++ " " ++ show rt
     show (ETyped e t) = "(" ++ show e ++ "): " ++ show t
     show (EPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
