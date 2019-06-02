@@ -21,7 +21,7 @@ unfix v = return v
 reverseFun :: Value -> Result Value
 reverseFun (VFix _ _) = error "missing unfix"
 reverseFun (VFun p b) = Success $ VFun b p
-reverseFun (VLitFun jc t1 t2 n1 f1 n2 f2) = Success $ VLitFun jc t2 t1 n2 f2 n1 f1
+reverseFun (VLitFun (TFun jc at rt) n1 f1 n2 f2) = Success $ VLitFun (TFun jc rt at) n2 f2 n1 f1
 reverseFun v = Rejected $ (show v) ++ " is not a function"
 
 checkList (VList l) = Success l
@@ -69,7 +69,7 @@ eval1 (EApp f a) = do
         VFun p b -> do
             e' <- patternMatch p a'
             local (const e') $ eval b
-        VLitFun _ _ _ _ f _ _ -> 
+        VLitFun _ _ f _ _ -> 
             lift $ f a'
         VFix _ _ ->
             error "missing unfix"
@@ -84,8 +84,6 @@ eval1 (ELam p b) = do
     p <- lift $ subst f p
     b <- lift $ subst f b
     return $ VFun p b
-eval1 (ETyped e _) = 
-    eval e
 eval1 (EPair a b) = do
     a' <- eval a
     b' <- eval b
@@ -123,7 +121,18 @@ eval1 (EPairType a b) = do
 eval1 (EListType t) = do
     t' <- eval t >>= lift . checkType
     return $ VType $ TList t'
-
+eval1 (EForallType n t) = do
+    t' <- (local (\env -> update env n (VType $ TVar n)) (eval t)) >>= lift . checkType
+    return $ VType $ TForall n t'
+eval1 (ETypeLam n b) = do
+    eval b
+eval1 (ETyped e _) = 
+    eval e
+eval1 (ETypeApp f a) = 
+    eval1 f
+eval1 (ETypeLet _ _ v) =
+    eval1 v
+    
 patternMatch :: (Context c, Monoid (c Name Value)) => Expr -> Value -> EvalMonad c (EvalContext c)
 --patternMatch e v | Debug.Trace.trace (show e ++ " <~ " ++ show v) False = undefined
 patternMatch (ELit l2) l1 | l1 == l2 = ask
@@ -144,7 +153,7 @@ patternMatch (EApp f a) v = do
             e' <- patternMatch b v
             p' <- local (const e') $ eval p
             patternMatch a p'
-        VLitFun _ _ _ _ _ _ f -> do
+        VLitFun _ _ _ _ f -> do
             v' <- lift $ f v
             patternMatch a v'
         VFix _ _ -> 

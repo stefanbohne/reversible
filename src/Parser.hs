@@ -113,6 +113,7 @@ pExprDup = (do
 pExprApp = do
     f <- pExprDup
     as <- many (((flip EApp) <$> pTupleExpr) <|>
+                ((flip ETypeApp) <$> ((symbol "{") *> pType <* (symbol "}"))) <|>
                 (ERev <$ symbol "~"))
     return $ foldl (flip ($)) f as
 pExprTyped = do
@@ -138,7 +139,16 @@ pExprLet = (do
         return (p, e)) (try $ operator ";")
     symbol "in"
     v <- pExpr
-    return $ foldr (\(p, e) v -> ECaseOf e [(p, v)]) v lets) <|> pExprArith
+    return $ foldr (\(p, e) v -> ECaseOf e [(p, v)]) v lets) <|> (do
+    try $ symbol "type"
+    lets <- sepBy1 (do
+        n <- pIdent
+        operator "="
+        t <- pType
+        return (User n, t)) (try $ operator ";")
+    symbol "in"
+    v <- pExpr
+    return $ foldr (\(n, t) v -> ETypeLet n t v) v lets) <|> pExprArith
 pExprCase = (do
     _ <- try $ symbol "case"
     e <- pExpr
@@ -155,14 +165,30 @@ pExprLam = (do
     p <- pExpr
     _ <- operator "=>"
     b <- pExpr
-    return $ ELam p b) <|> pExprCase
+    return $ ELam p b) <|> (do
+    try $ symbol "forall"
+    n <- pIdent
+    operator "."
+    b <- pExpr
+    return $ ETypeLam (User n) b) <|> pExprCase
 pExpr = pExprLam
 
 pType :: Parser ctx Expr
-pType = makeExprParser pSimpleType [
+pType = pForallType
+pForallType = (do
+    try $ symbol "forall"
+    n <- pIdent
+    operator "."
+    t <- pType
+    return $ EForallType (User n) t) <|> pFunType
+pFunType = makeExprParser pSimpleType [
         [binOp InfixN "<=>" (EFunType JRev)],
         [binOp InfixR "->" (EFunType JFun)]
     ]
+-- pTypeApp = do
+--     f <- pSimpleType
+--     as <- many ((flip EApp) <$> ((symbol "{") *> pType <* (symbol "}")))
+--     return $ foldl (flip ($)) f as
 pSimpleType :: Parser ctx Expr
 pSimpleType =
         (ELit $ VType TInt) <$ symbol "Int"
@@ -173,6 +199,7 @@ pSimpleType =
     <|> (ELit $ VType TBottom) <$ symbol "Bottom"
     <|> pTupleType
     <|> (symbol "[") *> (EListType <$> pType) <* (symbol "]")
+    <|> ((EVar . User) <$> pIdent)
 pTupleType :: Parser ctx Expr
 pTupleType = do
     es <- pList (symbol "(") pType (symbol ")")

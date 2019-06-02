@@ -7,5 +7,18 @@ substr: String -> (Int, Int) -> String =
                          (s3, x3) = splitAt(t - f)(s2) 
                      in s3
 
+pForget: forall A. A -> (String <=> (A, String)) -> (String <=> ((), String)) =
+    forall A. \a => \p => \s => 
+        let (x, r) = p(s);
+            () = forget{A}(a)(x) in
+        ((), r)
 pWord: String -> String <=> ((), String) = 
     \w: String => \splitAt(strlen(&w))~(&w, r) => ((), r)
+pWS_: String <=> (String, String) =
+    \s: String => case s of
+        splitAt(1)~(" ", r) => 
+            let (ws, r2) = pWS_(r) in
+            (splitAt(1)~(" ", ws), r2);
+        r => ("", r)
+pWS: String -> String <=> ((), String) = 
+    \default => pForget{String}(default)(pWS_)
