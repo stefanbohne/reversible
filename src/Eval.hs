@@ -34,7 +34,7 @@ checkPair v = Rejected $ (show v) ++ " is not a tuple"
 
 checkCons (VList (a : b)) = Success (a, b)
 checkCons (VFix _ _) = error "missing unfix"
-checkCons v@(VList []) = TypeError $ (show v) ++ " is not a non-empty list"
+checkCons v@(VList []) = Rejected $ (show v) ++ " is not a non-empty list"
 checkCons v = Rejected $ (show v) ++ " is not a list"
 
 checkType (VType t) = Success t

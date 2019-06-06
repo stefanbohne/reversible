@@ -1,30 +1,75 @@
+// appends an item to a list
 append: forall A. ([A], A) <=> [A] = 
     forall A. \(l, x) => case l of
         [] => [x];
         y :: r => y :: append{A}(r, x)
+// reverses a list
 reverse: forall A. [A] <=> [A] =
     forall A. \l => case l of
         [] => [];
         x :: r => append{A}(reverse{A}(r), x)
+// applies each element of a list to a function
 map: forall A. forall B. (A <=> B) -> ([A] <=> [B]) =
     forall A. forall B. \f => \l => case l of
         [] => [];
         a :: r => f(a) :: map{A}{B}(f)(r)
 
+// returns the length of a string
 strlen: String -> Int = 
     \splitAt(1)~(c, r) => case c of
         "" => 0;
         x => 1 + strlen(r)
+// returns the substring at index [f, t)
 substr: String -> (Int, Int) -> String =
     \s => \(f, t) => let (x2, s2) = splitAt(&f)(s); 
                          (s3, x3) = splitAt(t - f)(s2) 
                      in s3
+// splits the string at n characters from the right
+splitAtRight: Int -> String <=> (String, String) =
+    \n => \s => case s of
+        splitAt(n)~(s2, "") => ("", s2);
+        splitAt(1)~(c, s2) => let (s3, s4) = splitAtRight(n)(s2) in (splitAt(1)~(c, s3), s4)
+// reverses a string
+strReverse: String <=> String =
+    \s => case s of
+        "" => "";
+        splitAtRight(1)~(r, c) => splitAt(1)~(c, strReverse(r))
 
-pForget: forall A. A -> (String <=> (A, String)) -> (String <=> ((), String)) =
-    forall A. \a => \p => \s => 
-        let (x, r) = p(s);
-            () = forget{A}(a)(x) in
-        ((), r)
+// returns the number of leading whitespaces of a string and the string without leading whitespaces 
+scanWS: String <=> (Int, String) =
+    \splitAt(1)~(c, r) => case c of
+        "" => (0, r);
+        " " => let (ws, y) = scanWS(r) in (ws + 1, y);
+        y => (0, splitAt(1)~(y, r))
+// returns the string without leading whitespaces
+skipWS: String <=> String =
+    \scanWS~(ws, s) => 
+        let () = forget{Int}(0)(ws) in s
+
+// muladd(k)(a, b) = a * k + b. muladd(k)~(y) = (floor(y / k), y mod k) 
+muladd: Int -> (Int, Int) <=> Int =
+    \k => \(a, b) =>
+        let y = a * k + b;
+            () = forget{Int}(y - y / k * k)(b)
+        in y
+str2Int_: String <=> Int =
+    \s => case s of
+        "" => 0;
+        splitAt(1)~("0", r) => muladd(10)(str2Int_(r), 0);
+        splitAt(1)~("1", r) => muladd(10)(str2Int_(r), 1);
+        splitAt(1)~("2", r) => muladd(10)(str2Int_(r), 2);
+        splitAt(1)~("3", r) => muladd(10)(str2Int_(r), 3);
+        splitAt(1)~("4", r) => muladd(10)(str2Int_(r), 4);
+        splitAt(1)~("5", r) => muladd(10)(str2Int_(r), 5);
+        splitAt(1)~("6", r) => muladd(10)(str2Int_(r), 6);
+        splitAt(1)~("7", r) => muladd(10)(str2Int_(r), 7);
+        splitAt(1)~("8", r) => muladd(10)(str2Int_(r), 8);
+        splitAt(1)~("9", r) => muladd(10)(str2Int_(r), 9)
+// returns the integer represented by a string ignoring leading zeroes and whitespaces
+str2Int: String <=> Int =
+    \skipWS~(s) => str2Int_(strReverse(s))
+
+// parses a fixed string
 pWord: String -> String <=> ((), String) = 
     \w: String => \splitAt(strlen(&w))~(&w, r) => ((), r)
 pWS_: String <=> (String, String) =
@@ -33,5 +78,35 @@ pWS_: String <=> (String, String) =
             let (ws, r2) = pWS_(r) in
             (splitAt(1)~(" ", ws), r2);
         r => ("", r)
+// parses (possibly empty) whitespaces
 pWS: String -> String <=> ((), String) = 
     \default => pForget{String}(default)(pWS_)
+
+// forgets a parse result by providing a default
+pForget: forall A. A -> (String <=> (A, String)) -> (String <=> ((), String)) =
+    forall A. \a => \p => \s => 
+        let (x, r) = p(s);
+            () = forget{A}(a)(x) in
+        ((), r)
+// applies a reversible function to a parser
+pMap: forall A. forall B. String <=> (A, String) -> (A <=> B) -> String <=> (B, String) =
+    forall A. forall B. \pa => \f => \s => 
+        let (a, r) = pa(s) in (f(a), r)
+// monad bind for parsers
+pBind: forall A. forall B. String <=> (A, String) -> (A -> String <=> (B, String)) -> String <=> ((A, B), String) =
+    forall A. forall B. \pa => \f => \s => 
+        let (a, r) = pa(s);
+            (b, r2) = f(a)(r)
+        in ((a, b), r2)
+// non-empty repeating parser with separator
+pRepSep1: forall A. String <=> (A, String) -> String <=> ((), String) -> String <=> ([A], String) =
+    forall A. \pRep => \pSep => \s => case () of
+        () => let (v1, r1) = pRep(s);
+                  ((), r2) = pSep(r1);
+                  (l3, r3) = pRepSep1{A}(pRep)(pSep)(r2) in (v1 :: l3, r3);
+        () => let (v1, r1) = pRep(s) in ([v1], r1)
+// possibly empty repeating parser with separator
+pRepSep: forall A. String <=> (A, String) -> String <=> ((), String) -> String <=> ([A], String) =
+    forall A. \pRep => \pSep => \s => case () of
+        () => pRepSep1{A}(pRep)(pSep)(s);
+        () => ([], s)

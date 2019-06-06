@@ -26,7 +26,7 @@ pCmd =  pQuitCmd
     <|> pEvalLetCmd
 pQuitCmd = QuitCmd <$ (symbol ":quit" <|> symbol ":q")
 pTypeCmd = do
-    _ <- symbol ":type" <|> symbol ":t"
+    symbol ":type" <|> symbol ":t"
     e <- pExpr
     return $ TypeCmd e
 pListCmd = ListCmd <$ symbol ":list"
@@ -35,9 +35,9 @@ pLoadCmd = do
     fn <- many anySingle
     return $ LoadCmd fn
 pEvalLetCmd = do
-    _ <- notFollowedBy $ char ':'
+    notFollowedBy $ char ':'
     e1 <- pExpr
-    (do _ <- try $ symbol "="
+    (do try $ symbol "="
         e2 <- pExpr
         return $ LetCmd e1 e2) <|> (return $ EvalCmd e1)
     

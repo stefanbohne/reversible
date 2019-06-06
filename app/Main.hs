@@ -38,13 +38,13 @@ resultGet :: Result a -> Repl a
 resultGet (Success a) = return a
 resultGet (Suspended a) = resultGet a
 resultGet (Rejected msg) = do
-    _ <- liftIO $ putStrLn $ "Rejected: " ++ msg
+    liftIO $ putStrLn $ "Rejected: " ++ msg
     abort
 resultGet (Error msg) = do
-    _ <- liftIO $ putStrLn $ "Error: " ++ msg
+    liftIO $ putStrLn $ "Error: " ++ msg
     abort
 resultGet (TypeError msg) = do
-    _ <- liftIO $ putStrLn $ "Type Error: " ++ msg
+    liftIO $ putStrLn $ "Type Error: " ++ msg
     abort
 
 -- Evaluation : handle each line user inputs
@@ -76,18 +76,18 @@ runCmd (LetCmd p v) = do
     env' <- resultGet $ mapValuesM (\(n, t) -> do
         v <- lookup venv' n
         return (t, v)) tenv'
-    _ <- put (env' <> env)
+    put (env' <> env)
     return ()
 runCmd (TypeCmd e) = do
     env <- lift $ get
     let tenv = mapValues (\(n, (t, v)) -> t) env
     (j, t, _) <- resultGet $ typeCheckExpr' e tenv True JFun TTop
-    _ <- liftIO $ putStrLn $ show j ++ ": " ++ show t
+    liftIO $ putStrLn $ show j ++ ": " ++ show t
     return ()
 runCmd (ListCmd) = do
     env <- lift $ get
-    _ <- mapValuesM (\(n, (t, v)) -> do
-        _ <- liftIO $ putStrLn $ show n ++ " = " ++ show v
+    mapValuesM (\(n, (t, v)) -> do
+        liftIO $ putStrLn $ show n ++ " = " ++ show v
         return ()) env
     return ()
 runCmd (LoadCmd f) = do

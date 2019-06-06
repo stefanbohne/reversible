@@ -34,14 +34,14 @@ symbol = L.symbol sc
 
 operator :: Text -> Parser c ()
 operator text = do
-    _ <- string text
-    _ <- notFollowedBy $ oneOf ("!@#$%^&*-+=<>|/\\~:;" :: String)
-    _ <- sc
+    string text
+    notFollowedBy $ oneOf ("!@#$%^&*-+=<>|/\\~:;" :: String)
+    sc
     return ()
 
 binOp :: (Parser ctx (a -> a -> a) -> Operator (Parser ctx) a) -> Text -> (a -> a -> a) -> Operator (Parser ctx) a
 binOp cons op f = cons $ do
-    _ <- try $ operator op
+    try $ operator op
     return f
 binOpLit cons op fun = binOp cons op (\l r -> EApp (EApp (ELit fun) r) l)
         
@@ -50,7 +50,7 @@ pIdent :: Parser c String
 pIdent = do 
     h <- letterChar
     t <- many (alphaNumChar <|> char '_')
-    _ <- sc
+    sc
     return (h : t)
 
 pInt :: Parser c Int
@@ -107,7 +107,7 @@ pListNext p end = ([] <$ try end) <|> (do
     r <- pListNext p end
     return $ b : r)
 pExprDup = (do
-    _ <- try $ operator "&"
+    try $ operator "&"
     e <- pExprTerm
     return $ EDup e) <|> pExprTerm
 pExprApp = do
@@ -119,7 +119,7 @@ pExprApp = do
 pExprTyped = do
     l <- pExprApp
     (do
-        _ <- try $ operator ":"
+        try $ operator ":"
         r <- pType
         return $ ETyped l r) <|> return l
 pExprArith = makeExprParser pExprTyped [
@@ -150,20 +150,20 @@ pExprLet = (do
     v <- pExpr
     return $ foldr (\(n, t) v -> ETypeLet n t v) v lets) <|> pExprArith
 pExprCase = (do
-    _ <- try $ symbol "case"
+    try $ symbol "case"
     e <- pExpr
-    _ <- symbol "of"
+    symbol "of"
     cases <- sepBy (do
         p <- try pExprLet
-        _ <- symbol "=>"
+        symbol "=>"
         v <- pExpr
         return (p, v)) (operator ";")
-    _ <- optional $ try $ operator ";"
+    optional $ try $ operator ";"
     return $ ECaseOf e cases) <|> pExprLet
 pExprLam = (do
     try $ operator "\\"
     p <- pExpr
-    _ <- operator "=>"
+    operator "=>"
     b <- pExpr
     return $ ELam p b) <|> (do
     try $ symbol "forall"
