@@ -1,3 +1,16 @@
+append: forall A. ([A], A) <=> [A] = 
+    forall A. \(l, x) => case l of
+        [] => [x];
+        y :: r => y :: append{A}(r, x)
+reverse: forall A. [A] <=> [A] =
+    forall A. \l => case l of
+        [] => [];
+        x :: r => append{A}(reverse{A}(r), x)
+map: forall A. forall B. (A <=> B) -> ([A] <=> [B]) =
+    forall A. forall B. \f => \l => case l of
+        [] => [];
+        a :: r => f(a) :: map{A}{B}(f)(r)
+
 strlen: String -> Int = 
     \splitAt(1)~(c, r) => case c of
         "" => 0;

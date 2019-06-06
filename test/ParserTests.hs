@@ -119,3 +119,6 @@ test_parseCase = do
     parse_test "case 1 of 2 => 3" (ECaseOf (ELit $ VInt 1) [(ELit $ VInt 2, ELit $VInt 3)])
     parse_test "case 1 of 2 => 3; 4 => 5" (ECaseOf (ELit $ VInt 1) [
         (ELit $ VInt 2, ELit $VInt 3), (ELit $ VInt 4, ELit $ VInt 5)])
+
+test_parseForall = do
+    parse_test "(forall A. x: A) : forall A. A" (ETyped (ETypeLam (User "A") (ETyped (EVar $ User "x") (EVar $ User "A"))) (EForallType (User "A") (EVar $ User "A")))

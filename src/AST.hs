@@ -3,6 +3,7 @@ module AST where
 import Prelude hiding (lookup)
 import qualified Data.List
 import Data.Functor.Identity
+import Data.Maybe
 import Algebra.Lattice
 import Algebra.PartialOrd
 import Control.Applicative
@@ -38,7 +39,7 @@ instance PartialOrd JanusClass where
     leq a b = leq (Join a) (Join b)
 
 class Substitutable a where
-    subst_ :: (Monad m) => a -> ReaderT (Name -> m a) m a
+    subst_ :: (Monad m) => a -> ReaderT (Name -> Maybe (m a)) m a
     
 
 data Type =
@@ -63,7 +64,7 @@ instance Eq Type where
     (TList t1) == (TList t2) = t1 == t2
     (TFun jc1 at1 rt1) == (TFun jc2 at2 rt2) = jc1 == jc2 && at1 == at2 && rt1 == rt2
     (TVar n1) == (TVar n2) = n1 == n2
-    (TForall n1 t1) == (TForall n2 t2) = t1 == (runIdentity $ subst1 (n2, return $ TVar n1) (\n -> return $ TVar n) t2)
+    (TForall n1 t1) == (TForall n2 t2) = t1 == (runIdentity $ subst1 (n2, return $ TVar n1) t2)
     (TTypeApp f1 a1) == (TTypeApp f2 a2) = f1 == f2 && a1 == a2
     _ == _ = False
 instance Show Type where
@@ -84,7 +85,7 @@ instance Show Type where
 instance Substitutable Type where
     subst_ (TVar n) = do
         s <- ask
-        lift $ s n
+        lift $ fromMaybe (return $ TVar n) (s n)
     subst_ (TPair a b) = do
         a <- subst_ a
         b <- subst_ b
@@ -113,7 +114,7 @@ instance JoinSemiLattice Type where
     (TPair a1 b1) \/ (TPair a2 b2) = TPair (a1 \/ a2) (b1 \/ b2)
     (TList t1) \/ (TList t2) = TList (t1 \/ t2)
     (TForall n1 t1) \/ (TForall n2 t2) = 
-        let t2subst = runIdentity $ subst1 (n2, return (TVar n1)) (\n -> return $ TVar n) t2 in
+        let t2subst = runIdentity $ subst1 (n2, return (TVar n1)) t2 in
         TForall n1 (t1 \/ t2subst)
     (TTypeApp f1 a1) \/ (TTypeApp f2 a2) =
         TTypeApp (f1 \/ f2) (a1 \/ a2)
@@ -126,7 +127,7 @@ instance MeetSemiLattice Type where
     (TPair a1 b1) /\ (TPair a2 b2) = TPair (a1 /\ a2) (b1 /\ b2)
     (TList t1) /\ (TList t2) = TList (t1 /\ t2)
     (TForall n1 t1) /\ (TForall n2 t2) = 
-        let t2subst = runIdentity $ subst1 (n2, return $ TVar n1) (\n -> return $ TVar n) t2 in
+        let t2subst = runIdentity $ subst1 (n2, return $ TVar n1) t2 in
         TForall n1 (t1 /\ t2subst)
     (TTypeApp f1 a1) /\ (TTypeApp f2 a2) =
         TTypeApp (f1 /\ f2) (a1 /\ a2)
@@ -169,8 +170,8 @@ data Value =
     |   VUnit
     |   VList [Value]
     |   VLitFun Type String (Value -> Result Value) String (Value -> Result Value)
-    |   VFun Expr Expr
-    |   VFix Expr [(Name, Type, Expr)]
+    |   VFun (IndexList Name Value) Expr Expr
+    |   VFix Expr [(Name, Expr)]
     |   VType Type
 instance Show Value where
     show (VInt i) = show i
@@ -178,11 +179,11 @@ instance Show Value where
     show (VString s) = show s
     show (VChar c) = show c
     show (VLitFun _ n _ _ _) = n
-    show (VFun p b) = "(\\" ++ show p ++ " => " ++ show b ++ ")"
-    show (VFix e es) = show e
-    show (VPair a b) = "(" ++ show a ++ ", " ++ show b ++ ")"
+    show (VFun env p b) = "#(\\" ++ show p ++ " => " ++ show b ++ ")#" ++ showContext env
+    show (VFix e es) = "#fixed(" ++ show e ++ ")"
+    show (VPair a b) = "#(" ++ show a ++ ", " ++ show b ++ ")"
     show (VUnit) = "()"
-    show (VList l) = "[" ++ (Data.List.intercalate ", " $ map show l) ++ "]"
+    show (VList l) = "#[" ++ (Data.List.intercalate ", " $ map show l) ++ "]"
     show (VType t) = show t
 instance Eq Value where
     (VInt i1) == (VInt i2) = i1 == i2
@@ -190,7 +191,7 @@ instance Eq Value where
     (VString s1) == (VString s2) = s1 == s2
     (VChar c1) == (VChar c2) = c1 == c2
     (VLitFun _ n1 _ _ _) == (VLitFun _ n2 _ _ _) = n1 == n2
-    (VFun p1 b1) == (VFun p2 b2) = p1 == p2 && b1 == b2
+    (VFun env1 p1 b1) == (VFun env2 p2 b2) = env1 == env2 && p1 == p2 && b1 == b2
     (VPair a1 b1) == (VPair a2 b2) = a1 == a2 && b1 == b2
     (VUnit) == (VUnit) = True
     (VList l1) == (VList l2) = l1 == l2
@@ -209,7 +210,7 @@ typeOfLit _ (VString _) = TString
 typeOfLit _ (VChar _) = TChar
 typeOfLit _ (VType _) = TType
 typeOfLit _ (VLitFun t _ _ _ _) = t
-typeOfLit _ (VFun _ _) = error "runtime-only value"
+typeOfLit _ (VFun _ _ _) = error "runtime-only value"
 typeOfLit fw (VPair a b) = TPair (typeOfLit fw a) (typeOfLit fw b)
 typeOfLit _ (VUnit) = TUnit
 typeOfLit fw (VList []) = TList (if fw then TBottom else TTop)
@@ -267,17 +268,17 @@ ePairTypeFold vs = foldr f (ELit (VType TUnit)) vs
           f l r@(EPairType _ _) = EPairType l r
           f l r = EPairType l r
                       
-subst :: (Substitutable a, Monad m) => (Name -> m a) -> a -> m a
+subst :: (Substitutable a, Monad m) => (Name -> Maybe (m a)) -> a -> m a
 subst f e = runReaderT (subst_ e) f
-subst1 :: (Substitutable a, Monad m) => (Name, m a) -> (Name -> m a) -> a -> m a
-subst1 (n, r) f e = subst (\n' -> if n' == n then r else f n') e
+subst1 :: (Substitutable a, Monad m) => (Name, m a) -> a -> m a
+subst1 (n, r) e = subst (\n' -> if n' == n then Just r else Nothing) e
 
 instance Substitutable Expr where
     subst_ (ELit v) =
         return $ ELit v
     subst_ (EVar n) = do
         s <- ask
-        lift $ s n
+        lift $ fromMaybe (return $ EVar n) (s n)
     subst_ (EApp f a) = do
         a <- subst_ a
         f <- subst_ f

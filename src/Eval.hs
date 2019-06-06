@@ -15,12 +15,12 @@ type EvalMonad c = ReaderT (EvalContext c) Result
 
 unfix :: (Context c, Monoid (c Name Value)) => Value -> EvalMonad c Value
 unfix (VFix e es) = do
-    local (\env -> foldl (\env (n, t, e) -> update env n (VFix e es)) mempty es) $ eval e
+    local (\env -> foldl (\env (n, e) -> update env n (VFix e es)) mempty es) $ eval e
 unfix v = return v
 
 reverseFun :: Value -> Result Value
 reverseFun (VFix _ _) = error "missing unfix"
-reverseFun (VFun p b) = Success $ VFun b p
+reverseFun (VFun env p b) = Success $ VFun env b p
 reverseFun (VLitFun (TFun jc at rt) n1 f1 n2 f2) = Success $ VLitFun (TFun jc rt at) n2 f2 n1 f1
 reverseFun v = Rejected $ (show v) ++ " is not a function"
 
@@ -49,6 +49,8 @@ patternMatchExpr' expr v ctx = runReaderT (patternMatch expr v) ctx
 eval :: (Context c, Monoid (c Name Value)) => Expr -> EvalMonad c Value
 --eval e | Debug.Trace.trace (show e ++ " ~>") False = undefined
 eval e = do
+    _env <- ask
+    --Debug.Trace.traceM $ showContext _env
     v <- eval1 e >>= unfix 
     --Debug.Trace.trace (show e ++ " ~> " ++ show v) $ return ()
     return v
@@ -66,7 +68,7 @@ eval1 (EApp f a) = do
     a' <- eval a
     f' <- eval f
     case f' of
-        VFun p b -> do
+        VFun env p b -> local (\_ -> copyContext env) $ do
             e' <- patternMatch p a'
             local (const e') $ eval b
         VLitFun _ _ f _ _ -> 
@@ -80,10 +82,7 @@ eval1 (ERev f) = do
     lift $ reverseFun f'
 eval1 (ELam p b) = do
     env <- ask
-    let f n = (ELit <$> lookup env n) <|> (return $ EVar n)
-    p <- lift $ subst f p
-    b <- lift $ subst f b
-    return $ VFun p b
+    return $ VFun (copyContext env) p b
 eval1 (EPair a b) = do
     a' <- eval a
     b' <- eval b
@@ -95,13 +94,11 @@ eval1 (ECons a b) = do
     return $ VList $ a' : b''
 eval1 (EFix es) = do
     env <- ask
-    let f n = (ELit <$> lookup env n) <|> (return $ EVar n)
-    es <- forM es $ \(n, t, e) -> do
-        t <- eval t
-        t <- lift $ typeRequired $ checkType t
+    let f n = rejectedToNothing (ELit <$> lookup env n)
+    es <- forM es $ \(n, _, e) -> do
         e <- lift $ subst f e
-        return (n, t, e)
-    vs <- forM es $ \(n, t, e) ->
+        return (n, e)
+    vs <- forM es $ \(n, e) ->
         return $ VFix e es 
     return $ vPairFold vs
 eval1 (ECaseOf e cs) = do
@@ -149,9 +146,10 @@ patternMatch (EDup e) v = do
 patternMatch (EApp f a) v = do
     f' <- eval f
     case f' of
-        VFun p b -> do
-            e' <- patternMatch b v
-            p' <- local (const e') $ eval p
+        VFun env p b -> do
+            p' <- local (\_ -> copyContext env) $ do
+                env' <- patternMatch b v
+                local (const env') $ eval p
             patternMatch a p'
         VLitFun _ _ _ _ f -> do
             v' <- lift $ f v

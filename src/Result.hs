@@ -100,6 +100,10 @@ expectRejected msg (Success v) = Rejected msg
 expectRejected _ (Error msg) = Error msg
 expectRejected _ (TypeError msg) = TypeError msg
 
+rejectedToNothing :: Result a -> Maybe (Result a)
+rejectedToNothing (Rejected _) = Nothing
+rejectedToNothing r = Just r
+
 msgPrefix :: String -> Result a -> Result a
 msgPrefix prefix (Rejected msg) = Rejected (prefix ++ msg)
 msgPrefix prefix (Error msg) = Error (prefix ++ msg)

@@ -36,7 +36,7 @@ test_internals =
 
 test_lit = do
     evalTest "10" $ VInt 10
-    evalTest "\\x => x" $ VFun (EVar $ User "x") (EVar $ User "x")
+    evalTest "\\x => x" $ VFun internals (EVar $ User "x") (EVar $ User "x")
 
 test_arithmatic = do
     evalTest "1+2" $ VInt 3
@@ -44,7 +44,8 @@ test_arithmatic = do
     evalTest "5 / 2" $ VInt 2
 
 test_lambda = do
-    evalTest "(\\x => \\y => y) (21)" $ VFun (EVar $ User "y") (EVar $ User "y")
+    evalTest "\\x => \\y => y" $ VFun internals (EVar $ User "x") (ELam (EVar $ User "y") (EVar $ User "y"))
+    evalTest "(\\x => \\y => y) (21)" $ VFun (update internals (User "x") (VInt 21)) (EVar $ User "y") (EVar $ User "y")
     evalTest "(\\1 => 2) (1)" $ VInt 2
     evalTestRejected "(\\1 => 1) (2)"
     evalTest "(\\f: (Int, Int) -> Int => \\x: Int => f(&x + 1, x + 2))(\\(x,y) => x * y)(3)" $ VInt 20
@@ -86,9 +87,11 @@ test_fix = do
     evalTest "(fix(append: ([Int], Int) <=> [Int] = \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x)))([1,2],3)" $ VList [VInt 1, VInt 2, VInt 3]
     evalTest "(fix(append: ([Int], Int) <=> [Int] = \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x)))~([1,2,3])" $ VPair (VList [VInt 1, VInt 2]) (VInt 3)
     evalTest "let (append, reverse) = fix(\
-        \append: ([Int], Int) <=> [Int] = \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x), \
-        \reverse: [Int] <=> [Int] = \\l => case l of [] => []; append(reverse(r), x) => x::r) in \
-        \(reverse([1,2,3]), reverse~([1,2,3]))" (VPair (VList [VInt 3, VInt 2, VInt 1]) (VList [VInt 3, VInt 2, VInt 1]))
+        \append: forall A. ([A], A) <=> [A] = forall A. \\(l: [A], x: A) => case l of [] => [x]; y::l => y::append{A}(l, x), \
+        \reverse: forall A. [A] <=> [A] = forall A. \\l => case l of [] => []; append{A}(reverse{A}(r), x) => x::r) in \
+        \(reverse{Int}([1,2,3]), reverse{Int}~([1,2,3]))" (VPair (VList [VInt 3, VInt 2, VInt 1]) (VList [VInt 3, VInt 2, VInt 1]))
+    evalTest "fix(times: Int -> (Int -> Int) -> (Int -> Int) = \
+        \\\n => \\f => \\m => case n of 0 => m; n2 + 1 => times(n2)(f)(f(m)))(10)(\\x => x + 2)(3)" (VInt 23)
 
 test_case = do
     evalTest "case 1 of 1 => 2; 2 => 3" $ VInt 2

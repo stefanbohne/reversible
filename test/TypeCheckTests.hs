@@ -46,7 +46,7 @@ tcTestFailExpr expr = do
 test_internals = 
     forM (unIndexList internals) $ \(n, v) ->
         let t = typeOfLit True v in
-        tcTestExpr (EVar n) (lin2jc (isEquType t), t)
+        tcTestExpr (EVar n) (JFun, t)
 
 test_int = do
     tcTest "123" (JRev, "Int")
@@ -78,6 +78,10 @@ test_lam = do
     tcTestFail "\\x => x"
     tcTest "\\x: Int => \\y: [Int] => y" (JFun, "Int -> [Int] <=> [Int]")
     tcTest "\\f: Int <=> Int => \\f(x) => x" (JFun, "Int <=> Int -> Int <=> Int")
+    tcTestFail "\\x: Int => \\x: Int => 1"
+    tcTestFail "\\x: Int => case x of x => 1"
+    tcTest "\\x: Int => \\y: Int => (x, y)" (JFun, "Int -> Int -> (Int, Int)")
+    tcTest "\\x: Int => \\y: Int => (&x, y)" (JFun, "Int -> Int <=> (Int, Int)")
 
 test_rev = do
     tcTest "(\\x: Int => x)~" (JFun, "Int <=> Int")
@@ -98,7 +102,7 @@ test_tuple = do
 
 test_list = do
     tcTest "\\[] => []" (JFun, "[Top] <=> [Bottom]")
-    tcTest "\\[\"x\", \'x\'] => [1,True]" (JFun, "[Bottom] <=> [Top]")
+    tcTest "\\[\"x\", \'x\'] => [1, &True]" (JFun, "[Bottom] <=> [Top]")
     tcTest "\\[[[]]] => [[[]]]" (JFun, "[[[Top]]] <=> [[[Bottom]]]")
     tcTest "\\[1] => [1]" (JFun, "[Int] <=> [Int]")
     tcTest "\\[1, 2, 3] => [1, 2, 3]" (JFun, "[Int] <=> [Int]")
@@ -111,7 +115,7 @@ test_fix = do
     tcTest "fix(x: Int = x)" (JFun, "Int")
     tcTest "fix(f: Int <=> Int = \\x => f(x + 1))" (JFun, "Int <=> Int")
     tcTestFail "fix(f: Int <=> Int = \\x => f(&x + 1))"
-    tcTest "fix(append: ([Int], Int) <=> [Int] = \\(l: [Int], x: Int) => case l of [] => [x]; y::l => y::append(l, x))" (JFun, "([Int], Int) <=> [Int]")
+    tcTest "fix(append: ([Int], Int) <=> [Int] = \\(l: [Int], x: Int) => case l of [] => [x]; y::r => y::append(r, x))" (JFun, "([Int], Int) <=> [Int]")
 
 test_let = do
     tcTest "\\let n = m + 1 in n - 1 => m" (JFun, "Int <=> Int")
@@ -130,3 +134,7 @@ test_case = do
     tcTest "\\x: Int => case 1 of 1 => x; 2 => x" (JFun, "Int <=> Int")
     tcTest "\\x: Int => case 1 of 1 => x; 2 => 2" (JFun, "Int -> Int")
     tcTest "case 1 of 1 => \\x: Int => x; 2 => \\x: Int => &x" (JFun, "Int -> Int")    
+
+test_forall = do
+    --tcTest "(forall A. \\x: A => x, forall A. \\x: A => x)" (JFun, "(forall A. A <=> A, forall A. A <=> A)") 
+    tcTest "fix(f: forall A. A = forall A. g{A}, g: forall A. A = forall A. f{A})" (JFun, "(forall A. A, forall A. A)")

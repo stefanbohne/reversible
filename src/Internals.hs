@@ -72,10 +72,10 @@ opSplitAtK n = VLitFun (TFun JRev TString (TPair TString TString)) ("splitAt(" +
     return $ VString $ s1 ++ s2)
 
 opForget :: Value
-opForget = VLitFun (TForall (User "a") (TFun JFun (TVar $ User "a") (TFun JRev (TVar $ User "a") TUnit))) "forget" (
+opForget = VLitFun (TForall (User "A") (TFun JFun (TVar $ User "A") (TFun JRev (TVar $ User "A") TUnit))) "forget" (
     \v -> return $ opForgetK v) "" (\_ -> TypeError $ "not reversible")
 opRemember :: Value
-opRemember = VLitFun (TForall (User "a") (TFun JFun (TVar $ User "a") (TFun JRev TUnit (TVar $ User "a")))) "remember" (
+opRemember = VLitFun (TForall (User "A") (TFun JFun (TVar $ User "A") (TFun JRev TUnit (TVar $ User "A")))) "remember" (
     \v -> reverseFun $ opForgetK v) "" (\_ -> TypeError $ "not reversible")
 opForgetK :: Value -> Value
 opForgetK v = VLitFun (TFun JRev TTop TUnit) ("forget(" ++ show v ++ ")") (
