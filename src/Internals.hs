@@ -5,18 +5,6 @@ import Result
 import Eval
 import Context
 
-checkInt (VInt i) = Success i
-checkInt v = Rejected $ (show v) ++ " is not an Int"
-
-checkBool (VBool b) = Success b
-checkBool v = Rejected $ (show v) ++ " is not a Bool"
-
-checkString (VString s) = Success s
-checkString v = Rejected $ (show v) ++ " is not a String"
-
-checkChar (VChar c) = Success c
-checkChar v = Rejected $ (show v) ++ " is not a Char"
-
 
 opPlus :: Value
 opPlus = VLitFun (TFun JFun TInt (TFun JRev TInt TInt)) "+" (\r -> do
@@ -80,14 +68,35 @@ opRemember = VLitFun (TForall (User "A") (TFun JFun (TVar $ User "A") (TFun JRev
 opForgetK :: Value -> Value
 opForgetK v = VLitFun (TFun JRev TTop TUnit) ("forget(" ++ show v ++ ")") (
     \_ -> return VUnit) ("remember(" ++ show v ++ ")") (\_ -> return v)
-    
+
+opError :: Value
+opError = VLitFun (TForall (User "A") (TFun JFun TString (TFun JRev TUnit (TVar $ User "A")))) "error" (
+    \v -> do
+        msg <- typeRequired $ checkString v
+        return $ opErrorK msg) "" (\_ -> TypeError $ "not reversible")
+opErrorK :: String -> Value
+opErrorK msg = VLitFun (TFun JRev TTop TBottom) name impl name impl
+    where name = "error(" ++ show msg ++ ")"
+          impl v = Error msg
+opReject :: Value
+opReject = VLitFun (TForall (User "A") (TFun JFun TString (TFun JRev TUnit (TVar $ User "A")))) "reject" (
+    \v -> do
+        msg <- typeRequired $ checkString v
+        return $ opRejectK msg) "" (\_ -> TypeError $ "not reversible")
+opRejectK :: String -> Value
+opRejectK msg = VLitFun (TFun JRev TTop TBottom) name impl name impl
+    where name = "reject(" ++ show msg ++ ")"
+          impl v = Error msg
+                
 
 _internals = [
     VBool True, 
     VBool False, 
     opSplitAt,
     opForget,
-    opRemember
+    opRemember,
+    opError,
+    opReject
     ]
 internals :: (Context c, Monoid (c Name Value)) => c Name Value
 internals = mkContext $ map (\v -> (User $ show v, v)) _internals

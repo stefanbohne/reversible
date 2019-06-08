@@ -1,7 +1,6 @@
 module Eval where
 
 import Prelude hiding (lookup)
-import qualified Prelude
 import Control.Monad.Reader
 import Control.Applicative
 import qualified Debug.Trace
@@ -28,6 +27,10 @@ checkList (VList l) = Success l
 checkList (VFix _ _) = error "missing unfix"
 checkList v = Rejected $ (show v) ++ " is not a list"
 
+checkUnit (VUnit) = Success ()
+checkUnit (VFix _ _) = error "missing unfix"
+checkUnit v = Rejected $ (show v) ++ " is not ()"
+
 checkPair (VPair a b) = Success (a, b)
 checkPair (VFix _ _) = error "missing unfix"
 checkPair v = Rejected $ (show v) ++ " is not a tuple"
@@ -41,13 +44,42 @@ checkType (VType t) = Success t
 checkType (VFix _ _) = error "missing unfix"
 checkType v = Rejected $ (show v) ++ " is not a type"
 
+checkInt (VInt i) = Success i
+checkInt v = Rejected $ (show v) ++ " is not an Int"
+
+checkBool (VBool b) = Success b
+checkBool v = Rejected $ (show v) ++ " is not a Bool"
+
+checkString (VString s) = Success s
+checkString v = Rejected $ (show v) ++ " is not a String"
+
+checkChar (VChar c) = Success c
+checkChar v = Rejected $ (show v) ++ " is not a Char"
+
+getFunType :: Type -> Result (JanusClass, Type, Type)
+getFunType (TFun jc at rt) = Success (jc, at, rt)
+getFunType t = Rejected $ "expected function type but got " ++ show t
+
+getPairType :: Type -> Result (Type, Type)
+getPairType (TPair a b) = Success (a, b)
+getPairType t = Rejected $ "expected pair type but got " ++ show t
+
+getListType :: Type -> Result Type
+getListType (TList t) = Success t
+getListType t = Rejected $ "expected list type but got " ++ show t
+
+getForallType :: Type -> Result (Name, Type)
+getForallType (TForall n t) = Success (n, t)
+getForallType t = Rejected $ "expected forall type but got " ++ show t
+
+
 evalExpr' :: (Context c, Monoid (c Name Value)) => Expr -> EvalContext c -> Result Value
 evalExpr' expr ctx = runReaderT (eval expr) ctx
 patternMatchExpr' :: (Context c, Monoid (c Name Value)) => Expr -> Value -> EvalContext c -> Result (EvalContext c)
 patternMatchExpr' expr v ctx = runReaderT (patternMatch expr v) ctx
 
 eval :: (Context c, Monoid (c Name Value)) => Expr -> EvalMonad c Value
---eval e | Debug.Trace.trace (show e ++ " ~>") False = undefined
+--eval e | Debug.Trace.trace (show e ++ " ~> ") False = undefined
 eval e = do
     _env <- ask
     --Debug.Trace.traceM $ showContext _env
@@ -121,6 +153,12 @@ eval1 (EListType t) = do
 eval1 (EForallType n t) = do
     t' <- (local (\env -> update env n (VType $ TVar n)) (eval t)) >>= lift . checkType
     return $ VType $ TForall n t'
+eval1 (EAppType f a) = do
+    f' <- eval f
+    a' <- eval a
+    (n, ft) <- lift $ typeRequired $ checkType f' >>= getForallType
+    at <- lift $ checkType a'
+    lift $ VType <$> subst1 (n, return at) ft
 eval1 (ETypeLam n b) = do
     eval b
 eval1 (ETyped e _) = 

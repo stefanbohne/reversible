@@ -6,9 +6,7 @@ import Data.Functor.Identity
 import Data.Maybe
 import Algebra.Lattice
 import Algebra.PartialOrd
-import Control.Applicative
 import Control.Monad.Reader
-import Control.Monad.State.Strict
 
 import Result
 import Context
@@ -221,6 +219,7 @@ data Expr =
     |   EVar Name 
     |   EApp Expr Expr
     |   ETypeApp Expr Expr
+    |   EAppType Expr Expr
     |   ELam Expr Expr
     |   ETypeLam Name Expr
     |   EFunType JanusClass Expr Expr
@@ -242,6 +241,7 @@ instance Show Expr where
     show (EDup e) = "&(" ++ show e ++ ")"
     show (EApp f a) = show f ++ "(" ++ show a ++ ")"
     show (ETypeApp f a) = show f ++ "{" ++ show a ++ "}"
+    show (EAppType f a) = show f ++ "{" ++ show a ++ "}"
     show (ERev f) = show f ++ "~"
     show (ELam p b) = "(\\" ++ show p ++ " => " ++ show b ++ ")"
     show (ETypeLam n b) = "forall " ++ show n ++ ". " ++ show b
@@ -284,6 +284,10 @@ instance Substitutable Expr where
         f <- subst_ f
         return $ EApp f a
     subst_ (ETypeApp f a) = do
+        a <- subst_ a
+        f <- subst_ f
+        return $ ETypeApp f a
+    subst_ (EAppType f a) = do
         a <- subst_ a
         f <- subst_ f
         return $ ETypeApp f a

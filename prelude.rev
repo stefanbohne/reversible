@@ -35,8 +35,10 @@ strReverse: String <=> String =
         "" => "";
         splitAtRight(1)~(r, c) => splitAt(1)~(c, strReverse(r))
 
+// reversible parser type
+type Parser = forall A. String <=> (A, String)
 // returns the number of leading whitespaces of a string and the string without leading whitespaces 
-scanWS: String <=> (Int, String) =
+scanWS: Parser{Int} =
     \splitAt(1)~(c, r) => case c of
         "" => (0, r);
         " " => let (ws, y) = scanWS(r) in (ws + 1, y);
@@ -70,8 +72,12 @@ str2Int: String <=> Int =
     \skipWS~(s) => str2Int_(strReverse(s))
 
 // parses a fixed string
-pWord: String -> String <=> ((), String) = 
+pWord: String -> Parser{()} = 
     \w: String => \splitAt(strlen(&w))~(&w, r) => ((), r)
+// pConst: forallEq A. String -> A -> Parser{A} =
+//    forallEq A. \w: String => \a: A => pMap{()}{A}(\() => &a)(pWord(w))
+// parses nothing
+pEmpty: Parser{()} = pWord("")
 pWS_: String <=> (String, String) =
     \s: String => case s of
         splitAt(1)~(" ", r) => 
@@ -79,34 +85,52 @@ pWS_: String <=> (String, String) =
             (splitAt(1)~(" ", ws), r2);
         r => ("", r)
 // parses (possibly empty) whitespaces
-pWS: String -> String <=> ((), String) = 
+pWS: String -> Parser{()} = 
     \default => pForget{String}(default)(pWS_)
 
 // forgets a parse result by providing a default
-pForget: forall A. A -> (String <=> (A, String)) -> (String <=> ((), String)) =
+pForget: forall A. A -> Parser{A} -> Parser{()} =
     forall A. \a => \p => \s => 
         let (x, r) = p(s);
             () = forget{A}(a)(x) in
         ((), r)
 // applies a reversible function to a parser
-pMap: forall A. forall B. String <=> (A, String) -> (A <=> B) -> String <=> (B, String) =
+pMap: forall A. forall B. Parser{A} -> (A <=> B) -> Parser{B} =
     forall A. forall B. \pa => \f => \s => 
         let (a, r) = pa(s) in (f(a), r)
+//pKeyword: forall A. String -> A -> Parser{A} =
+//    forallEq A. \s => \a => pMap{()}{A}(pWord(s))(\() => &a)
 // monad bind for parsers
-pBind: forall A. forall B. String <=> (A, String) -> (A -> String <=> (B, String)) -> String <=> ((A, B), String) =
+pBind: forall A. forall B. Parser{A} -> (A -> Parser{B}) -> Parser{(A, B)} =
     forall A. forall B. \pa => \f => \s => 
         let (a, r) = pa(s);
             (b, r2) = f(a)(r)
         in ((a, b), r2)
 // non-empty repeating parser with separator
-pRepSep1: forall A. String <=> (A, String) -> String <=> ((), String) -> String <=> ([A], String) =
-    forall A. \pRep => \pSep => \s => case () of
-        () => let (v1, r1) = pRep(s);
+pRepSep1: forall A. Parser{A} -> Parser{()} -> Parser{[A]} =
+    forall A. \p => \pSep => \s => case () of
+        () => let (v1, r1) = p(s);
                   ((), r2) = pSep(r1);
-                  (l3, r3) = pRepSep1{A}(pRep)(pSep)(r2) in (v1 :: l3, r3);
-        () => let (v1, r1) = pRep(s) in ([v1], r1)
+                  (l3, r3) = pRepSep1{A}(p)(pSep)(r2) in (v1 :: l3, r3);
+        () => let (v1, r1) = p(s) in ([v1], r1)
 // possibly empty repeating parser with separator
-pRepSep: forall A. String <=> (A, String) -> String <=> ((), String) -> String <=> ([A], String) =
-    forall A. \pRep => \pSep => \s => case () of
-        () => pRepSep1{A}(pRep)(pSep)(s);
+pRepSep: forall A. Parser{A} -> Parser{()} -> Parser{[A]} =
+    forall A. \p => \pSep => \s => case () of
+        () => pRepSep1{A}(p)(pSep)(s);
         () => ([], s)
+// non-empty repeating parser
+pRep1: forall A. Parser{A} -> Parser{[A]} = 
+    forall A. \p => pRepSep1{A}(p)(pEmpty)
+// possibly empty repeating parser (Kleene-star)
+pRep: forall A. Parser{A} -> Parser{[A]} = 
+    forall A. \p => pRepSep{A}(p)(pEmpty)
+// parsers in sequence
+pSeq: forall A. [Parser{A}] -> Parser{[A]} =
+    forall A. \ps => error{String <=> ([A], String)}("TODO")()
+// parser tried in order
+pTry: forall A. [Parser{A}] -> Parser{A} =
+    forall A. \ps => case ps of 
+        p :: rps => \s => (case () of
+            () => p(s);
+            () => pTry{A}(rps)(s));
+        [] => \reject{String}("Out of alternatives")() => reject{(A, String)}("Out of alternatives")()

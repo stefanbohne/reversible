@@ -30,7 +30,7 @@ tcTest src (expectedJ, expectedSrc) = do
         Left err -> fail $ errorBundlePretty err
 tcTestExpr :: Expr -> (JanusClass, Type) -> IO ()
 tcTestExpr expr expected = do
-    let tc = (\(j, t, lin) -> (j, t)) <$> typeCheckExpr' expr internalTypes True JFun TTop
+    let tc = (\(j, t, lin) -> (j, t)) <$> typeCheckExpr' expr mempty internalTypes True JFun TTop
     assertEqual (Success expected) tc
 tcTestFail :: Text -> IO ()
 tcTestFail src = do
@@ -39,7 +39,7 @@ tcTestFail src = do
         Left err -> fail $ errorBundlePretty err
 tcTestFailExpr :: Expr -> IO ()
 tcTestFailExpr expr = do
-    case required $ typeCheckExpr' expr internalTypes True JFun TTop of
+    case required $ typeCheckExpr' expr mempty internalTypes True JFun TTop of
         Error _ -> return ()
         res -> assertEqual (Error "*anything*") res
             
@@ -136,5 +136,11 @@ test_case = do
     tcTest "case 1 of 1 => \\x: Int => x; 2 => \\x: Int => &x" (JFun, "Int -> Int")    
 
 test_forall = do
-    --tcTest "(forall A. \\x: A => x, forall A. \\x: A => x)" (JFun, "(forall A. A <=> A, forall A. A <=> A)") 
+    tcTest "(forall A. \\x: A => x, forall A. \\x: A => x)" (JFun, "(forall A. A <=> A, forall A. A <=> A)")
     tcTest "fix(f: forall A. A = forall A. g{A}, g: forall A. A = forall A. f{A})" (JFun, "(forall A. A, forall A. A)")
+    --tcTest "forallEq A. \\x: A => \\() => &x" (JFun, "forallEq A. A -> () <=> A")
+
+test_appType = do
+    tcTestFail "type A=() in 1: A{String}"
+    tcTest "type A=forall B. B -> B in (\\x => x): A{Int}" (JFun, "Int -> Int")
+    tcTest "type A=forall B. B -> B in fix(f: A{String} = \\x => f(x))" (JFun, "String -> String")

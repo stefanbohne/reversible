@@ -5,7 +5,6 @@ import Control.Monad.Fail
 import Control.Monad.Fix
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Data.Monoid
 import qualified Debug.Trace
 
 

@@ -2,10 +2,7 @@ module ReplParser where
 
 import Text.Megaparsec
 import Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer as L
-import Control.Monad.Combinators.Expr 
 import Control.Monad.Reader
-import Data.Text (Text)
     
 import Parser
 import AST
@@ -13,6 +10,7 @@ import AST
 data ReplCmd 
     = EvalCmd Expr
     | LetCmd Expr Expr
+    | TypeLetCmd Name Expr
     | QuitCmd
     | TypeCmd Expr
     | ListCmd
@@ -23,6 +21,7 @@ pCmd =  pQuitCmd
     <|> pTypeCmd
     <|> pListCmd
     <|> pLoadCmd
+    <|> pTypeLetCmd
     <|> pEvalLetCmd
 pQuitCmd = QuitCmd <$ (symbol ":quit" <|> symbol ":q")
 pTypeCmd = do
@@ -34,6 +33,12 @@ pLoadCmd = do
     symbol ":load" <|> symbol ":l"
     fn <- many anySingle
     return $ LoadCmd fn
+pTypeLetCmd = do
+    symbol "type"
+    n <- pIdent
+    symbol "="
+    t <- pType
+    return $ TypeLetCmd (User n) t
 pEvalLetCmd = do
     notFollowedBy $ char ':'
     e1 <- pExpr

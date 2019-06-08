@@ -1,23 +1,27 @@
 module FileParser where
 
 import Text.Megaparsec
-import Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer as L
-import Control.Monad.Combinators.Expr 
 import Control.Monad.Reader
-import Data.Text (Text)
     
 import Parser
 import AST
 
-pFileParser :: Parser ctx [(String, Expr, Expr)]
+data FileLine = LetLine String Expr Expr
+             |  TypeLine String Expr
+
+pFileParser :: Parser ctx [FileLine]
 pFileParser =
-    many $ do
+    many $ (do
+        try $ symbol "type"
+        n <- pIdent
+        operator "="
+        t <- pType
+        return $ TypeLine n t) <|> (do
         n <- try pIdent
         operator ":"
         t <- pType
         operator "="
         v <- pExpr
-        return (n, t, v)
+        return $ LetLine n t v)
        
 parseFile internals = parse (runReaderT (sc *> pFileParser <* eof) internals)

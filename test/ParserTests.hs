@@ -122,3 +122,7 @@ test_parseCase = do
 
 test_parseForall = do
     parse_test "(forall A. x: A) : forall A. A" (ETyped (ETypeLam (User "A") (ETyped (EVar $ User "x") (EVar $ User "A"))) (EForallType (User "A") (EVar $ User "A")))
+    --parse_test "(forallEq A. x: A) : forallEq A. A" (ETyped (ETypeLam (User "A") (ETyped (EVar $ User "x") (EVar $ User "A"))) (EForallType (User "A") (EVar $ User "A")))
+
+test_parseAppType = do
+    parse_test "type A=() in 1: A{String}" (ETypeLet (User "A") (ELit $ VType TUnit) (ETyped (ELit $ VInt 1) (EAppType (EVar $ User "A") (ELit $ VType $ TString))))

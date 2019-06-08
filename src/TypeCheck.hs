@@ -8,7 +8,6 @@ import Data.Functor.Identity
 import Algebra.PartialOrd
 import Algebra.Lattice
 import Debug.Trace
-import Control.Monad
 
 import Result
 import AST
@@ -29,22 +28,6 @@ getJanusClass :: JanusClass -> JanusClass -> Result ()
 getJanusClass jc jclower = 
     if jc `leq` jclower then Success ()
     else Rejected $ "expected janus class " ++ show jclower ++ " but got " ++ show jc
-
-getFunType :: Type -> Result (JanusClass, Type, Type)
-getFunType (TFun jc at rt) = Success (jc, at, rt)
-getFunType t = Rejected $ "expected function type but got " ++ show t
-
-getPairType :: Type -> Result (Type, Type)
-getPairType (TPair a b) = Success (a, b)
-getPairType t = Rejected $ "expected pair type but got " ++ show t
-
-getListType :: Type -> Result Type
-getListType (TList t) = Success t
-getListType t = Rejected $ "expected list type but got " ++ show t
-
-getForallType :: Type -> Result (Name, Type)
-getForallType (TForall n t) = Success (n, t)
-getForallType t = Rejected $ "expected forall type but got " ++ show t
 
 type TCContext c = (c Name Type, c Name Type, c Name (Maybe Type))
 type TCMonad c = StateT (TCContext c) Result
@@ -123,19 +106,21 @@ typeEval t = do
     t <- lift $ typeRequired $ checkType v
     return t
              
-typeCheckExpr' :: (Context c, Monoid (c Name Type), Monoid (c Name (Maybe Type)), Monoid (c Name Value)) => Expr -> c Name Type -> Bool -> JanusClass -> Type -> Result (JanusClass, Type, c Name Type)
-typeCheckExpr' e ctx fw j t = required $ do
-    ((j, t, _), (types, nonlin, lin)) <- runStateT (typeCheck e fw j t) (mempty, ctx, mempty)
+typeCheckExpr' :: (Context c, Monoid (c Name Type), Monoid (c Name (Maybe Type)), Monoid (c Name Value)) => Expr -> c Name Type -> c Name Type -> Bool -> JanusClass -> Type -> Result (JanusClass, Type, c Name Type)
+typeCheckExpr' e tctx vctx fw j t = required $ do
+    let types = tctx
+    let nonlin = disjoint vctx (mapValues (\_ -> TType) tctx) 
+    ((j, t, _), (types, nonlin, lin)) <- runStateT (typeCheck e fw j t) (types, nonlin, mempty)
     return (j, t, flatMapValues lin (\case (n, Just t) -> singletonContext n t 
                                            (n, Nothing) -> emptyContext))
                  
 typeCheck :: (Context c, Monoid (c Name Type), Monoid (c Name Value)) => Expr -> Bool -> JanusClass -> Type -> TCMonad c (JanusClass, Type, [Name])
---typeCheck e fw j t | Debug.Trace.trace (show e ++ " :<- " ++ show fw ++ " " ++ show j ++ " " ++ show t) False = undefined
+typeCheck e fw j t | Debug.Trace.trace (show e ++ " :<- " ++ show fw ++ " " ++ show j ++ " " ++ show t) False = undefined
 typeCheck e fw j t = lift1 (msgNewLine $ "while checking " ++ show e ++ " : " ++ show j ++ " " ++ show t) $ do
     (_types, _nonlin, _lin) <- get
     --traceM $ showContext _types ++ " , " ++ showContext _nonlin ++ " , " ++ showContext _lin
     (j', t', vs') <- typeCheck1 e fw j t
-    --traceM $ show e ++ " :-> " ++ show j' ++" " ++ show t' ++ " " ++ show vs'
+    traceM $ show e ++ " :-> " ++ show j' ++" " ++ show t' ++ " " ++ show vs'
     if j' `gt` j then
         lift $ Rejected $ "expected janus class " ++ show j ++ " but inferred " ++ show j'
     else if fw then
@@ -249,8 +234,7 @@ typeCheck1 (EPair a b) fw j t = do
 typeCheck1 (EFix es) True _ t = do
     es <- forM es $ \(n, t, e) -> do
         typeCheck t True JFun TType
-        t <- lift $ evalExpr' t (mempty :: c Name Value)
-        t <- lift $ typeRequired $ checkType t
+        t <- typeEval t
         return (n, t, e)
     localNonLin $ do
         (types, nonlin, lin) <- get
@@ -271,7 +255,7 @@ typeCheck1 (ECaseOf e cs) True j t = do
     (je, te, vse) <- typeCheck e True j TTop
     let cs' = flip map cs $ \(p, v) -> do {
         (jp, tp, vsp) <- typeCheck p False (j /\ JRev) te;
-        (jv, tv, vsv) <- typeCheck v True j TTop;
+        (jv, tv, vsv) <- typeCheck v True j t;
         return (jv \/ jp, tv, vsp ++ vsv)
     }
     (jcs, tcs, vscs) <- foldl1 f cs' 
@@ -320,6 +304,14 @@ typeCheck1 (EForallType n t) True _ _ = do
         localNonLin $ typeCheck t True JFun TType
     return (JFun, TType, filter (/= n) vst)
 typeCheck1 t@(EForallType _ _) False _ _ =
+    lift $ Rejected $ "Type " ++ show t ++ " as pattern"
+typeCheck1 (EAppType f a) True _ _ = do
+    (_, _, vsa) <- typeCheck a True JFun TType
+    (_, _, vsf) <- typeCheck f True JFun TType
+    f' <- typeEval f
+    _ <- lift $ getForallType f'
+    return (JFun, TType, vsf ++ vsa)
+typeCheck1 t@(EAppType _ _) False _ _ =
     lift $ Rejected $ "Type " ++ show t ++ " as pattern"
 typeCheck1 (ETypeLet n t v) fw jc tv = do
     (_, _, vst) <- typeCheck t True JFun TType

@@ -7,13 +7,9 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import Control.Monad.Combinators.Expr 
 import Control.Monad.Reader
 import Data.Text (Text)
-import Data.Void
-import Data.Proxy
 
-import Result
 import AST
 import Internals
-import Context
 
 type Parser c = ReaderT (c Name Value) (Parsec String Text)
 
@@ -181,14 +177,14 @@ pForallType = (do
     operator "."
     t <- pType
     return $ EForallType (User n) t) <|> pFunType
-pFunType = makeExprParser pSimpleType [
+pFunType = makeExprParser pTypeApp [
         [binOp InfixN "<=>" (EFunType JRev)],
         [binOp InfixR "->" (EFunType JFun)]
     ]
--- pTypeApp = do
---     f <- pSimpleType
---     as <- many ((flip EApp) <$> ((symbol "{") *> pType <* (symbol "}")))
---     return $ foldl (flip ($)) f as
+pTypeApp = do
+    f <- pSimpleType
+    as <- many ((flip EAppType) <$> ((symbol "{") *> pType <* (symbol "}")))
+    return $ foldl (flip ($)) f as
 pSimpleType :: Parser ctx Expr
 pSimpleType =
         (ELit $ VType TInt) <$ symbol "Int"

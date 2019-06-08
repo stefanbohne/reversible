@@ -9,8 +9,8 @@ import Text.Megaparsec.Error
 import Data.Text hiding (map, foldl, foldr)
 import Data.Text.IO (readFile)
 import Control.Monad.State.Strict
-import Control.Applicative
 import Control.Exception (try)
+import Debug.Trace
 import Paths_reversible
 
 import ReplParser
@@ -22,8 +22,17 @@ import Result
 import Context
 import qualified Internals
 
-type ReplContext = IndexList Name (Type, Value)
+data ReplContext = ReplContext { 
+    ctxTypes :: IndexList Name Type, 
+    ctxValues :: IndexList Name (Type, Value)
+}
 type Repl a = HaskelineT (StateT ReplContext IO) a
+getTypes = lift $ ctxTypes <$> get
+putTypes :: IndexList Name Type -> Repl ()
+putTypes x = lift $ get >>= (\c -> return $ c { ctxTypes = x }) >>= put
+getValues = lift $ ctxValues <$> get
+putValues :: IndexList Name (Type, Value) -> Repl ()
+putValues x = lift $ get >>= (\c -> return $ c { ctxValues = x }) >>= put
 internals :: IndexList Name Value
 internals = Internals.internals
 
@@ -57,35 +66,47 @@ runCmd (QuitCmd) = liftIO $ do
     putStrLn "Goodbye."
     exitSuccess 
 runCmd (EvalCmd e) = do 
-    env <- lift $ get
+    types <- getTypes
+    env <- getValues
     let tenv = mapValues (\(n, (t, v)) -> t) env
     let venv = mapValues (\(n, (t, v)) -> v) env
-    (_, _, _) <- resultGet $ typeCheckExpr' e tenv True JFun TTop
+    (_, _, _) <- resultGet $ typeCheckExpr' e types tenv True JFun TTop
     liftIO $ putStrLn $ resultPretty $ show <$> evalExpr' e venv
 runCmd (LetCmd p v) = do
-    env <- lift $ get
+    types <- getTypes
+    env <- getValues
     let tenv = mapValues (\(n, (t, v)) -> t) env
     let venv = mapValues (\(n, (t, v)) -> v) env
     let v' = (case p of
                 ETyped (EVar n) t -> EFix [(n, t, v)]
                 _ -> v)
-    (_, tv, _) <- resultGet $ typeCheckExpr' v' tenv True JFun TTop
-    (_, _, tenv') <- resultGet $ typeCheckExpr' p tenv False JRev tv
+    (_, tv, _) <- resultGet $ typeCheckExpr' v' types tenv True JFun TTop
+    (_, _, tenv') <- resultGet $ typeCheckExpr' p types tenv False JRev tv
     v <- resultGet $ evalExpr' v' venv
     venv' <- resultGet $ patternMatchExpr' p v (venv :: EvalContext IndexList)
     env' <- resultGet $ mapValuesM (\(n, t) -> do
         v <- lookup venv' n
         return (t, v)) tenv'
-    put (env' <> env)
+    putValues (env' <> env)
     return ()
+runCmd (TypeLetCmd n t) = do
+    ReplContext {..} <- get
+    (_, _, _) <- resultGet $ typeCheckExpr' t ctxTypes (mapValues (\(n, t) -> TType) ctxTypes) True JFun TType
+    v <- resultGet $ evalExpr' t (mapValues (\(n, t) -> VType t) ctxTypes) >>= checkType
+    put ReplContext { ctxTypes = update ctxTypes n v, .. }
 runCmd (TypeCmd e) = do
-    env <- lift $ get
+    types <- getTypes
+    env <- getValues
     let tenv = mapValues (\(n, (t, v)) -> t) env
-    (j, t, _) <- resultGet $ typeCheckExpr' e tenv True JFun TTop
+    (j, t, _) <- resultGet $ typeCheckExpr' e types tenv True JFun TTop
     liftIO $ putStrLn $ show j ++ ": " ++ show t
     return ()
 runCmd (ListCmd) = do
-    env <- lift $ get
+    types <- getTypes
+    mapValuesM (\(n, t) -> do
+        liftIO $ putStrLn $ "type " ++ show n ++ " = " ++ show t
+        return ()) types
+    env <- getValues
     mapValuesM (\(n, (t, v)) -> do
         liftIO $ putStrLn $ show n ++ " = " ++ show v
         return ()) env
@@ -95,7 +116,10 @@ runCmd (LoadCmd f) = do
     case text of
         Right text -> case parseFile internals f text of
             Left err -> liftIO $ putStrLn $ errorBundlePretty err
-            Right lets -> do
+            Right lines -> do
+                let types = [(n, t) | TypeLine n t <- lines]
+                forM types $ \(n, t) -> runCmd(TypeLetCmd (User n) t)
+                let lets = [(n, t, e) | LetLine n t e <- lines]
                 let p = ePairFold $ map (\(n, t, _) -> ETyped (EVar $ User n) t) lets
                 let vs = EFix $ map (\(n, t, e) -> (User n, t, e)) lets
                 runCmd (LetCmd p vs)
@@ -121,4 +145,7 @@ ini = do
     liftIO $ putStrLn "Welcome!"
 
 main :: IO ()
-main = fst <$> runStateT (evalRepl (pure "J> ") cmd options Nothing (Word completer) ini) (mapValues (\(n, v) -> (typeOfLit True v, v)) internals)
+main = fst <$> runStateT (evalRepl (pure "J> ") cmd options Nothing (Word completer) ini)  ReplContext {..}
+    where 
+        ctxTypes = emptyContext :: IndexList Name Type
+        ctxValues = mapValues (\(n, v) -> (typeOfLit True v, v)) internals

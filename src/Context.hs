@@ -58,6 +58,10 @@ class Context c where
         if (find (== k) keys) == Nothing then emptyContext
         else update emptyContext k v)
     outerJoin :: (Eq k) => c k v -> c k v -> c k (OuterJoin v)
+    disjoint :: (Eq k) => c k v -> c k v -> c k v
+    disjoint c1 c2 = mapValues (\case (_, OJL v) -> v
+                                      (_, OJR v) -> v
+                                      _ -> error "not disjoint") (outerJoin c1 c2)
     showContext :: (Show v, Show k) => c k v -> String
     showContext c = "[" ++ intercalate ", " (map (\(k, v) -> show k ++ "->" ++ show v) (keyValues c)) ++ "]"
 instance {-# OVERLAPPABLE #-} (Context c, Show k, Show v) => Show (c k v) where
