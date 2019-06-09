@@ -44,7 +44,7 @@ test_arithmatic = do
     evalTest "5 / 2" $ VInt 2
 
 test_lambda = do
-    evalTest "\\x => \\y => y" $ VFun internals (EVar $ User "x") (ELam (EVar $ User "y") (EVar $ User "y"))
+    evalTest "\\x -> \\y <=> y" $ VFun internals (EVar $ User "x") (ELam (Just JRev) (EVar $ User "y") (EVar $ User "y"))
     evalTest "(\\x => \\y => y) (21)" $ VFun (update internals (User "x") (VInt 21)) (EVar $ User "y") (EVar $ User "y")
     evalTest "(\\1 => 2) (1)" $ VInt 2
     evalTestRejected "(\\1 => 1) (2)"

@@ -220,7 +220,7 @@ data Expr =
     |   EApp Expr Expr
     |   ETypeApp Expr Expr
     |   EAppType Expr Expr
-    |   ELam Expr Expr
+    |   ELam (Maybe JanusClass) Expr Expr
     |   ETypeLam Name Expr
     |   EFunType JanusClass Expr Expr
     |   ETyped Expr Expr
@@ -243,7 +243,8 @@ instance Show Expr where
     show (ETypeApp f a) = show f ++ "{" ++ show a ++ "}"
     show (EAppType f a) = show f ++ "{" ++ show a ++ "}"
     show (ERev f) = show f ++ "~"
-    show (ELam p b) = "(\\" ++ show p ++ " => " ++ show b ++ ")"
+    show (ELam Nothing p b) = "(\\" ++ show p ++ " => " ++ show b ++ ")"
+    show (ELam (Just jc) p b) = "(\\" ++ show p ++ " " ++ show jc ++ " " ++ show b ++ ")"
     show (ETypeLam n b) = "forall " ++ show n ++ ". " ++ show b
     show (EFunType j at rt) = show at ++ " " ++ show j ++ " " ++ show rt
     show (ETyped e t) = "(" ++ show e ++ "): " ++ show t
@@ -291,10 +292,10 @@ instance Substitutable Expr where
         a <- subst_ a
         f <- subst_ f
         return $ ETypeApp f a
-    subst_ (ELam p b) = do
+    subst_ (ELam jc p b) = do
         p <- subst_ p
         b <- subst_ b
-        return $ ELam p b
+        return $ ELam jc p b
     subst_ (ETypeLam n b) = do
         b <- subst_ b
         return $ ETypeLam n b

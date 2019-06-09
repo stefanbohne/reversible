@@ -4,6 +4,7 @@ import Prelude hiding (lookup)
 import Control.Monad.State.Strict
 import Control.Applicative
 import Data.List hiding (lookup)
+import Data.Maybe
 import Data.Functor.Identity
 import Algebra.PartialOrd
 import Algebra.Lattice
@@ -186,17 +187,22 @@ typeCheck1 (ERev f) fw j t = do
     else
         lift $ Rejected $ "Expected reversible function, got " ++ show (TFun jf atf rtf)
 
-typeCheck1 (ELam p b) True _ t = do
+typeCheck1 (ELam jc p b) True _ t = do
     (j, at, rt) <- lift $ getFunType t <|> return (JFun, TBottom, TTop)
+    let j' = fromMaybe j jc
     localNonLin $ do
         (jp, tp, vsp) <- typeCheck p False JRev at
-        (jb, tb, vsf) <- typeCheck b True j rt
+        (jb, tb, vsf) <- typeCheck b True j' rt
         (_, _, lin) <- get
         let full = allValues lin (\(_, t) -> t == Nothing)
         --traceM $ "lam lin " ++ show (keys lin) ++ show (values lin) ++ " full " ++ show full
-        return (JFun, TFun (jp \/ jb \/ lin2jc full) tp tb, 
-            filter (\n -> find (== n) (keys lin) /= Nothing) (vsp ++ vsf))
-typeCheck1 (ELam _ _) False _ _ = do
+        if j' `leq` JRev && not full then
+            lift $ Rejected $ "Not reversible, because variables were not consumed: " ++
+                intercalate ", " (map show $ keys (filterValues lin (\(_, t) -> t /= Nothing)))
+        else
+            return (JFun, TFun (jp \/ jb \/ lin2jc full) tp tb, 
+                filter (\n -> find (== n) (keys lin) /= Nothing) (vsp ++ vsf))
+typeCheck1 (ELam _ _ _) False _ _ = do
     lift $ Rejected "Lambda as pattern"
 
 typeCheck1 (ETypeLam n b) True _ t = do

@@ -62,12 +62,12 @@ test_parseRev = do
     parse_test "f~(x)~(y)~" (ERev (EApp (ERev (EApp (ERev (EVar $ User "f")) (EVar $ User "x"))) (EVar $ User "y")))
 
 test_parseFun = do
-    parse_test "\\x => 1" (ELam (EVar $ User "x") (ELit $ VInt 1))
-    parse_test " \\ x + y => 2 * 3" (ELam (bin opPlus (EVar $ User "y") (EVar $ User "x")) (bin opMul (ELit $ VInt 3) (ELit $ VInt 2)))
-    parse_test "\\x => \\y => x" (ELam (EVar $ User "x") (ELam (EVar $ User "y") (EVar $ User "x")))
-    parse_test "\\x : Int => x : Int" (ELam (ETyped (EVar $ User "x") (ELit $ VType TInt)) (ETyped (EVar $ User "x") (ELit $ VType TInt)))
-    parse_test "\\f(x) => f(x)" (ELam (EApp (EVar $ User "f") (EVar $ User "x")) (EApp (EVar $ User "f") (EVar $ User "x")))
-    parse_test "(\\a => b)(c)" (EApp (ELam (EVar $ User "a") (EVar $ User "b")) (EVar $ User "c"))
+    parse_test "\\x => 1" (ELam Nothing (EVar $ User "x") (ELit $ VInt 1))
+    parse_test " \\ x + y => 2 * 3" (ELam Nothing (bin opPlus (EVar $ User "y") (EVar $ User "x")) (bin opMul (ELit $ VInt 3) (ELit $ VInt 2)))
+    parse_test "\\x -> \\y <=> x" (ELam (Just JFun) (EVar $ User "x") (ELam (Just JRev) (EVar $ User "y") (EVar $ User "x")))
+    parse_test "\\x : Int => x : Int" (ELam Nothing (ETyped (EVar $ User "x") (ELit $ VType TInt)) (ETyped (EVar $ User "x") (ELit $ VType TInt)))
+    parse_test "\\f(x) => f(x)" (ELam Nothing (EApp (EVar $ User "f") (EVar $ User "x")) (EApp (EVar $ User "f") (EVar $ User "x")))
+    parse_test "(\\a => b)(c)" (EApp (ELam Nothing (EVar $ User "a") (EVar $ User "b")) (EVar $ User "c"))
 
 test_parseType = do
     parse_test "x : Int" (ETyped (EVar $ User "x") (ELit $ VType TInt))
@@ -99,7 +99,7 @@ test_parseList = do
     parse_test "[1,2,3,4]" (ECons (ELit $ VInt 1) (ECons (ELit $ VInt 2) (ECons (ELit $ VInt 3) (ECons (ELit $ VInt 4) (ELit $ VList [])))))
     parse_test "a::b" (ECons (EVar $ User "a") (EVar $ User "b"))
     parse_test "\\a+1::b:Int::c=>d:Int::e" (
-        ELam(ECons (EApp (EApp (ELit opPlus) (ELit $ VInt 1)) (EVar $ User "a")) (
+        ELam Nothing (ECons (EApp (EApp (ELit opPlus) (ELit $ VInt 1)) (EVar $ User "a")) (
              ECons (ETyped (EVar $ User "b") (ELit $ VType TInt)) (EVar $ User "c")))
             (ECons (ETyped (EVar $ User "d") (ELit $ VType TInt)) (EVar $ User "e"))
         )
@@ -111,8 +111,8 @@ test_parseFix = do
 
 test_parseLet = do
     parse_test "let 1=2; 3=4 in 5" (ECaseOf (ELit $ VInt 2) [(ELit $ VInt 1, ECaseOf (ELit $ VInt 4) [(ELit $ VInt 3, ELit $ VInt 5)])])
-    parse_test "\\let a=b in c => d" (ELam (ECaseOf (EVar $ User "b") [(EVar $ User "a", EVar $ User "c")]) (EVar $ User "d"))
-    parse_test "(\\let a=b in c => d)(x)" (EApp (ELam (ECaseOf (EVar $ User "b") [(EVar $ User "a", EVar $ User "c")]) (EVar $ User "d")) (EVar $ User "x"))
+    parse_test "\\let a=b in c => d" (ELam Nothing (ECaseOf (EVar $ User "b") [(EVar $ User "a", EVar $ User "c")]) (EVar $ User "d"))
+    parse_test "(\\let a=b in c => d)(x)" (EApp (ELam Nothing (ECaseOf (EVar $ User "b") [(EVar $ User "a", EVar $ User "c")]) (EVar $ User "d")) (EVar $ User "x"))
 
 test_parseCase = do
     parse_test "case 1 of" (ECaseOf (ELit $ VInt 1) [])

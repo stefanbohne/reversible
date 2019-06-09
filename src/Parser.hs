@@ -159,9 +159,11 @@ pExprCase = (do
 pExprLam = (do
     try $ operator "\\"
     p <- pExpr
-    operator "=>"
+    jc <- (Nothing <$ (try $ operator "=>")) <|>
+          (Just JFun <$ (try $ operator "->")) <|>
+          (Just JRev <$ (try $ operator "<=>"))
     b <- pExpr
-    return $ ELam p b) <|> (do
+    return $ ELam jc p b) <|> (do
     try $ symbol "forall"
     n <- pIdent
     operator "."

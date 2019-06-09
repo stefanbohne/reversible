@@ -112,7 +112,7 @@ eval1 (EApp f a) = do
 eval1 (ERev f) = do
     f' <- eval f
     lift $ reverseFun f'
-eval1 (ELam p b) = do
+eval1 (ELam _ p b) = do
     env <- ask
     return $ VFun (copyContext env) p b
 eval1 (EPair a b) = do
@@ -197,8 +197,8 @@ patternMatch (EApp f a) v = do
         l -> lift $ TypeError $ "Value '" ++ show a ++ "' applied to non-function '" ++ show f' ++ "' in pattern"
 patternMatch (ERev e) _ = do
     lift $ TypeError $ "'~' as pattern"
-patternMatch (ELam p b) _ = do
-    lift $ TypeError $ "Lambda '" ++ show (ELam p b) ++ "' as pattern"
+patternMatch p@(ELam _ _ _) _ = do
+    lift $ TypeError $ "Lambda '" ++ show p ++ "' as pattern"
 patternMatch (ETyped e _) v = 
     patternMatch e v
 patternMatch (EPair a b) v = do
