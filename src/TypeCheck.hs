@@ -115,12 +115,12 @@ typeCheckExpr' e tctx vctx fw j t = required $ do
                                            (n, Nothing) -> emptyContext))
                  
 typeCheck :: (Context c, Monoid (c Name Type), Monoid (c Name Value)) => Expr -> Bool -> JanusClass -> Type -> TCMonad c (JanusClass, Type, [Name])
-typeCheck e fw j t | Debug.Trace.trace (show e ++ " :<- " ++ show fw ++ " " ++ show j ++ " " ++ show t) False = undefined
+--typeCheck e fw j t | Debug.Trace.trace (show e ++ " :<- " ++ show fw ++ " " ++ show j ++ " " ++ show t) False = undefined
 typeCheck e fw j t = lift1 (msgNewLine $ "while checking " ++ show e ++ " : " ++ show j ++ " " ++ show t) $ do
     (_types, _nonlin, _lin) <- get
     --traceM $ showContext _types ++ " , " ++ showContext _nonlin ++ " , " ++ showContext _lin
     (j', t', vs') <- typeCheck1 e fw j t
-    traceM $ show e ++ " :-> " ++ show j' ++" " ++ show t' ++ " " ++ show vs'
+    --traceM $ show e ++ " :-> " ++ show j' ++" " ++ show t' ++ " " ++ show vs'
     if j' `gt` j then
         lift $ Rejected $ "expected janus class " ++ show j ++ " but inferred " ++ show j'
     else if fw then
