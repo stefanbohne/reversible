@@ -9,10 +9,15 @@ reverse: forall A. [A] <=> [A] =
         [] => [];
         x :: r => append{A}(reverse{A}(r), x)
 // applies each element of a list to a function
-map: forall A. forall B. (A <=> B) -> ([A] <=> [B]) =
+map: forall A. forall B. (A -> B) -> ([A] -> [B]) =
     forall A. forall B. \f => \l => case l of
         [] => [];
         a :: r => f(a) :: map{A}{B}(f)(r)
+// applies each element of a list to a reversible function
+mapr: forall A. forall B. (A <=> B) -> ([A] <=> [B]) =
+    forall A. forall B. \f => \l => case l of
+        [] => [];
+        a :: r => f(a) :: mapr{A}{B}(f)(r)
 
 // returns the length of a string
 strlen: String -> Int = 
@@ -74,10 +79,22 @@ str2Int: String <=> Int =
 // parses a fixed string
 pWord: String -> Parser{()} = 
     \w: String => \splitAt(strlen(&w))~(&w, r) => ((), r)
+// parser one of a set of characters given as a string
+pChar: String -> Parser{String} =
+    \cs => case cs of
+        "" => pFail{String}("all characters failed");
+        splitAt(1)~(c, rcs) => \s <=> case () of
+            () => pMap{()}{String}(pWord(c))(\() <=> &c)(s);
+            () => pChar(rcs)(s)
 // pConst: forallEq A. String -> A -> Parser{A} =
 //    forallEq A. \w: String => \a: A => pMap{()}{A}(\() => &a)(pWord(w))
-// parses nothing
-pEmpty: Parser{()} = pWord("")
+// parses nothing, always succeeds
+pEmpty: Parser{()} = 
+    pWord("")
+pEmptyList: forall A. Parser{[A]} = 
+    forall A. \s => ([], s)
+pFail: forall A. String -> Parser{A} = 
+    forall A. \msg => \reject{String}(msg)() => reject{(A, String)}(msg)()
 pWS_: String <=> (String, String) =
     \s: String => case s of
         splitAt(1)~(" ", r) => 
@@ -90,29 +107,39 @@ pWS: String -> Parser{()} =
 
 // forgets a parse result by providing a default
 pForget: forall A. A -> Parser{A} -> Parser{()} =
-    forall A. \a => \p => \s => 
+    forall A. \a => \p => \s <=> 
         let (x, r) = p(s);
             () = forget{A}(a)(x) in
         ((), r)
 // applies a reversible function to a parser
 pMap: forall A. forall B. Parser{A} -> (A <=> B) -> Parser{B} =
-    forall A. forall B. \pa => \f => \s => 
+    forall A. forall B. \pa => \f => \s <=> 
         let (a, r) = pa(s) in (f(a), r)
 //pKeyword: forall A. String -> A -> Parser{A} =
 //    forallEq A. \s => \a => pMap{()}{A}(pWord(s))(\() => &a)
 // monad bind for parsers
 pBind: forall A. forall B. Parser{A} -> (A -> Parser{B}) -> Parser{(A, B)} =
-    forall A. forall B. \pa => \f => \s => 
+    forall A. forall B. \pa => \f => \s <=> 
         let (a, r) = pa(s);
             (b, r2) = f(a)(r)
         in ((a, b), r2)
+pRepSepN: forall A. Int -> Parser{A} -> Parser{()} -> Parser{[A]} =
+    forall A. \n => case n of
+        0      => \p => \ps => pEmptyList{A};
+        1      => \p => \ps => \s <=> let (x1, s1) = p(s) in ([x1], s1);
+        n2 + 1 => \p => \ps => \s <=> let (x1, s1) = p(s);
+                                   ((), s2) = ps(s1);
+                                   (l3, s3) = pRepSepN{A}(n2)(p)(ps)(s2)
+                               in (x1 :: l3, s3)
 // non-empty repeating parser with separator
 pRepSep1: forall A. Parser{A} -> Parser{()} -> Parser{[A]} =
     forall A. \p => \pSep => \s => case () of
         () => let (v1, r1) = p(s);
                   ((), r2) = pSep(r1);
-                  (l3, r3) = pRepSep1{A}(p)(pSep)(r2) in (v1 :: l3, r3);
-        () => let (v1, r1) = p(s) in ([v1], r1)
+                  (l3, r3) = pRepSep1{A}(p)(pSep)(r2) 
+              in (v1 :: l3, r3);
+        () => let (v1, r1) = p(s) 
+              in ([v1], r1)
 // possibly empty repeating parser with separator
 pRepSep: forall A. Parser{A} -> Parser{()} -> Parser{[A]} =
     forall A. \p => \pSep => \s => case () of
@@ -126,11 +153,40 @@ pRep: forall A. Parser{A} -> Parser{[A]} =
     forall A. \p => pRepSep{A}(p)(pEmpty)
 // parsers in sequence
 pSeq: forall A. [Parser{A}] -> Parser{[A]} =
-    forall A. \ps => error{String <=> ([A], String)}("TODO")()
+    forall A. \ps => case ps of
+        [] => \s => ([], s);
+        p :: rps => \s => let (x1, s1) = p(s);
+                              (l2, s2) = pSeq{A}(rps)(s1)
+                          in (x1 :: l2, s2)
 // parser tried in order
 pTry: forall A. [Parser{A}] -> Parser{A} =
     forall A. \ps => case ps of 
         p :: rps => \s => (case () of
             () => p(s);
             () => pTry{A}(rps)(s));
-        [] => \reject{String}("Out of alternatives")() => reject{(A, String)}("Out of alternatives")()
+        [] => pFail{A}("Out of alternatives")
+
+// parses a single base-10 digit to an integer
+pDigit: Parser{Int} =
+    pTry{Int}(
+        map{(String, Int)}{Parser{Int}}
+            (\(d, v) => pMap{()}{Int}(pWord(d))(\() => &v)) 
+            ([("0", 0), ("1", 1), ("2", 2), ("3", 3), ("4", 4), 
+              ("5", 5), ("6", 6), ("7", 7), ("8", 8), ("9", 9)])
+    )
+// parser a sequence of digits base-10 into a single integer
+pInt: Parser{Int} = pMap{[Int]}{Int}(pRep1{Int}(pDigit))(
+    fix(digits2Int: [Int] <=> Int = 
+        \ds => case ds of
+            [] => 0;
+            append{Int}(rds, d) => muladd(10)(digits2Int(rds), d))
+    )
+// parses an identifier
+pIdent: Parser{String} = pMap{[[String]]}{String}(
+    pSeq{[String]}([
+        pMap{String}{[String]}(pChar("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"))(\s => [s]), 
+        pRep{String}(pChar("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"))
+    ]))(let join = fix(join: [String] <=> String = \ss <=> case ss of
+            [] => "";
+            s :: rss => splitAt(1)~(s, join(rss)))
+      in \[[s], ss] => splitAt(1)~(s, join(ss)))
