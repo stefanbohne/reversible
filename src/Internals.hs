@@ -86,7 +86,7 @@ opReject = VLitFun (TForall (User "A") (TFun JFun TString (TFun JRev TUnit (TVar
 opRejectK :: String -> Value
 opRejectK msg = VLitFun (TFun JRev TTop TBottom) name impl name impl
     where name = "reject(" ++ show msg ++ ")"
-          impl v = Error msg
+          impl v = Rejected msg
                 
 
 _internals = [
