@@ -73,6 +73,7 @@ test_parseType = do
     parse_test "x : Int" (ETyped (EVar $ User "x") (ELit $ VType TInt))
     parse_test "x : Int -> (Int) <=> ()" (ETyped (EVar $ User "x") (EFunType JFun (ELit $ VType TInt) (EFunType JRev (ELit $ VType TInt) (ELit $ VType TUnit))))
     parse_test "x : Int <=> [Bool] -> (String, Char)" (ETyped (EVar $ User "x") (EFunType JFun (EFunType JRev (ELit $ VType TInt) (EListType (ELit $ VType TBool))) (EPairType (ELit $ VType TString) (ELit $ VType TChar))))
+    parse_test "x : (Int, ()) -> ((), Int)" (ETyped (EVar $ User "x") (EFunType JFun (EPairType (ELit $ VType TInt) (ELit $ VType TUnit)) (EPairType (ELit $ VType TUnit) (ELit $ VType TInt))))
 
 test_parseTyped = do
     parse_test "x + y : Int" (bin opPlus (ETyped (EVar $ User "y") (ELit $ VType TInt)) (EVar $ User "x"))
@@ -91,6 +92,7 @@ test_parseTuple = do
     parse_test "(a)" (EVar $ User "a")
     parse_test "(1,b)" (EPair (ELit $ VInt 1) (EVar $ User "b"))
     parse_test "(1,2,3,4)" (ePairFold [ELit $ VInt 1, ELit $ VInt 2, ELit $ VInt 3, ELit $ VInt 4])
+    parse_test "((), ())" (EPair (ELit VUnit) (ELit VUnit))
 
 test_parseList = do
     parse_test "[]" (ELit $ VList [])

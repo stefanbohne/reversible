@@ -42,6 +42,7 @@ strReverse: String <=> String =
 
 // reversible parser type
 type Parser = forall A. String <=> (A, String)
+type Equ = forall A. A <=> ()
 // returns the number of leading whitespaces of a string and the string without leading whitespaces 
 scanWS: Parser{Int} =
     \splitAt(1)~(c, r) => case c of
@@ -86,8 +87,8 @@ pChar: String -> Parser{String} =
         splitAt(1)~(c, rcs) => \s <=> case () of
             () => pMap{()}{String}(pWord(c))(\() <=> &c)(s);
             () => pChar(rcs)(s)
-// pConst: forallEq A. String -> A -> Parser{A} =
-//    forallEq A. \w: String => \a: A => pMap{()}{A}(\() => &a)(pWord(w))
+pConst: forall A. String -> Equ{A} -> Parser{A} =
+    forall A. \w: String => \a => pMap{()}{A}(pWord(w))(a~)
 // parses nothing, always succeeds
 pEmpty: Parser{()} = 
     pWord("")
@@ -115,8 +116,6 @@ pForget: forall A. A -> Parser{A} -> Parser{()} =
 pMap: forall A. forall B. Parser{A} -> (A <=> B) -> Parser{B} =
     forall A. forall B. \pa => \f => \s <=> 
         let (a, r) = pa(s) in (f(a), r)
-//pKeyword: forall A. String -> A -> Parser{A} =
-//    forallEq A. \s => \a => pMap{()}{A}(pWord(s))(\() => &a)
 // monad bind for parsers
 pBind: forall A. forall B. Parser{A} -> (A -> Parser{B}) -> Parser{(A, B)} =
     forall A. forall B. \pa => \f => \s <=> 
@@ -158,6 +157,17 @@ pSeq: forall A. [Parser{A}] -> Parser{[A]} =
         p :: rps => \s => let (x1, s1) = p(s);
                               (l2, s2) = pSeq{A}(rps)(s1)
                           in (x1 :: l2, s2)
+pThen: forall A. forall B. (Parser{A}, Parser{B}) -> Parser{(A, B)} =
+    forall A. forall B. \(pa, pb) => \s => 
+        let (a, s1) = pa(s);
+            (b, s2) = pb(s1)
+        in ((a, b), s2)
+pThenL: forall A. (Parser{A}, Parser{()}) -> Parser{A} =
+    forall A. \(pa, pb) => 
+        pMap{(A, ())}{A}(pThen{A}{()}(pa, pb))(\(a, ()) => a)
+pThenR: forall A. (Parser{()}, Parser{A}) -> Parser{A} =
+    forall A. \(pa, pb) => 
+        pMap{((), A)}{A}(pThen{()}{A}(pa, pb))(\((), a) => a)
 // parser tried in order
 pTry: forall A. [Parser{A}] -> Parser{A} =
     forall A. \ps => case ps of 
@@ -190,3 +200,7 @@ pIdent: Parser{String} = pMap{[[String]]}{String}(
             [] => "";
             s :: rss => splitAt(1)~(s, join(rss)))
       in \[[s], ss] => splitAt(1)~(s, join(ss)))
+pKeyValue: Parser{[(String, Int)]} = 
+    pRepSep{(String, Int)}(
+        pThen{String}{Int}(pIdent, pThenR{Int}(pWS(" "), pThenR{Int}(pWord("="), pThenR{Int}(pWS(" "), pInt))))
+    )(pThenR{()}(pWord(","), pWS(" ")))

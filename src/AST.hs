@@ -133,10 +133,8 @@ instance MeetSemiLattice Type where
 instance PartialOrd Type where
     leq l r = leq (Join l) (Join r)
 tPairFold :: [Type] -> Type
-tPairFold vs = foldr f TUnit vs
-    where f l TUnit = l
-          f l r@(TPair _ _) = TPair l r
-          f l r = TPair l r
+tPairFold [] = TUnit
+tPairFold vs = foldr1 TPair vs
     
 typeRev:: Type -> Type
 typeRev TTop = TBottom
@@ -196,10 +194,8 @@ instance Eq Value where
     (VType t1) == (VType t2) = t1 == t2
     _ == _ = False
 vPairFold :: [Value] -> Value
-vPairFold vs = foldr f VUnit vs
-    where f l VUnit = l
-          f l r@(VPair _ _) = VPair l r
-          f l r = VPair l r
+vPairFold [] = VUnit
+vPairFold vs = foldr1 VPair vs
 
 typeOfLit :: Bool -> Value -> Type
 typeOfLit _ (VInt _) = TInt
@@ -259,15 +255,11 @@ instance Show Expr where
     show (EForallType n t) = "forall " ++ show n ++ ". " ++ show t
     show (ETypeLet n t v) = "type " ++ show n ++ " = " ++ show t ++ " in " ++ show v
 ePairFold :: [Expr] -> Expr
-ePairFold vs = foldr f (ELit $ VUnit) vs
-    where f l (ELit VUnit) = l
-          f l r@(EPair _ _) = EPair l r
-          f l r = EPair l r
+ePairFold [] = ELit VUnit
+ePairFold vs = foldr1 EPair vs
 ePairTypeFold :: [Expr] -> Expr
-ePairTypeFold vs = foldr f (ELit (VType TUnit)) vs
-    where f l (ELit (VType TUnit)) = l
-          f l r@(EPairType _ _) = EPairType l r
-          f l r = EPairType l r
+ePairTypeFold [] = ELit $ VType TUnit
+ePairTypeFold vs = foldr1 EPairType vs
                       
 subst :: (Substitutable a, Monad m) => (Name -> Maybe (m a)) -> a -> m a
 subst f e = runReaderT (subst_ e) f
