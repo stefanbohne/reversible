@@ -188,6 +188,7 @@ pDigit: Parser{Int} =
 pInt: Parser{Int} = pMap{[Int]}{Int}(pRep1{Int}(pDigit))(
     fix(digits2Int: [Int] <=> Int = 
         \ds => case ds of
+            [0] => 0;
             [] => 0;
             append{Int}(rds, d) => muladd(10)(digits2Int(rds), d))
     )
@@ -200,7 +201,29 @@ pIdent: Parser{String} = pMap{[[String]]}{String}(
             [] => "";
             s :: rss => splitAt(1)~(s, join(rss)))
       in \[[s], ss] => splitAt(1)~(s, join(ss)))
+// parses identifier-integer pairs seperated by comma ignoring spaces
 pKeyValue: Parser{[(String, Int)]} = 
     pRepSep{(String, Int)}(
         pThen{String}{Int}(pIdent, pThenR{Int}(pWS(" "), pThenR{Int}(pWord("="), pThenR{Int}(pWS(" "), pInt))))
-    )(pThenR{()}(pWord(","), pWS(" ")))
+    )(pThenL{()}(pWS(""), pThenR{()}(pWord(","), pWS(" "))))
+
+// filter function. where(f)(x) returns x, but only if f(x) == True.
+// otherwise it fails
+where: forall A. (A -> Bool) -> A <=> A =
+    forall A. \check => \a => 
+        case &(check(a)) of
+            &True => a
+// example: integer multiplication defined using integer addition
+mulFromAdd: Int -> Int <=> Int =
+    \k => \x => case x of
+        &0 => 
+            let y = forget{Int}(0)~() in
+            where{Int}(\yy => (0-k < yy && yy < k) || (k < yy && yy < 0-k))(y);
+        where{Int}(\xx => xx > 0 && k > 0)(xx) => 
+            where{Int}(\yy => yy > 0 && k > 0)(mulFromAdd(k)(xx - 1) + k);
+        where{Int}(\xx => xx > 0 && k < 0)(xx) => 
+            where{Int}(\yy => yy < 0 && k < 0)(mulFromAdd(k)(xx - 1) + k);
+        where{Int}(\xx => xx < 0 && k > 0)(xx) => 
+            where{Int}(\yy => yy < 0 && k > 0)(mulFromAdd(0 - k)(xx * (0 - 1)));
+        where{Int}(\xx => xx < 0 && k < 0)(xx) => 
+            where{Int}(\yy => yy > 0 && k < 0)(mulFromAdd(0 - k)(xx * (0 - 1)))

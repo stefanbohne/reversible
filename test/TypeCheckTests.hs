@@ -82,6 +82,7 @@ test_lam = do
     tcTestFail "\\x: Int => case x of x => 1"
     tcTest "\\x: Int => \\y: Int => (x, y)" (JFun, "Int -> Int -> (Int, Int)")
     tcTest "\\x: Int => \\y: Int => (&x, y)" (JFun, "Int -> Int <=> (Int, Int)")
+    tcTestFail "\\(x: Int) <=> (\\(y: Int) <=> y + x)(x)"
 
 test_rev = do
     tcTest "(\\x: Int => x)~" (JFun, "Int <=> Int")

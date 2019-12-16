@@ -1,13 +1,12 @@
 module Context where
 
 import Result
-import Debug.Trace
 import Data.List (find, filter, intercalate)
 import Data.Functor.Identity
 
-data OuterJoin a = OJL a
-                 | OJR a
-                 | OJB a a
+data OuterJoin a b = OJL a
+                   | OJR b
+                   | OJB a b
 
 class Context c where
     emptyContext :: c k v 
@@ -57,7 +56,7 @@ class Context c where
     without l keys = flatMapValues l (\(k, v) -> 
         if (find (== k) keys) == Nothing then emptyContext
         else update emptyContext k v)
-    outerJoin :: (Eq k) => c k v -> c k v -> c k (OuterJoin v)
+    outerJoin :: (Eq k) => c k v1 -> c k v2 -> c k (OuterJoin v1 v2)
     disjoint :: (Eq k) => c k v -> c k v -> c k v
     disjoint c1 c2 = mapValues (\case (_, OJL v) -> v
                                       (_, OJR v) -> v

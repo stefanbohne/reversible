@@ -11,7 +11,6 @@ import AST
 import Eval
 import Result
 import qualified Internals
-import Internals hiding (internals)
 import Context
 
 internals :: IndexList Name Value

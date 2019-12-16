@@ -1,5 +1,7 @@
 module Internals where
 
+import qualified Debug.Trace
+
 import AST
 import Result
 import Eval
@@ -36,7 +38,71 @@ opMulK r = VLitFun (TFun JRev TInt TInt) ("*" ++ show r) (\l -> do
     ("/" ++ show r) (\l -> do
         l <- typeRequired $ checkInt l
         return $VInt $ l `div` r)
-
+opEqu :: Value
+opEqu = VLitFun (TFun JFun TInt (TFun JFun TInt TBool)) "==" (\r -> do
+    r <- typeRequired $ checkInt r
+    return $ opEquK r) "" (\_ -> TypeError $ "not reversible")
+opEquK :: Int -> Value
+opEquK r = VLitFun (TFun JFun TInt TBool) ("==" ++ show r) (\l -> do
+    l <- typeRequired $ checkInt l
+    return $ VBool $ l == r) "" (\_ -> TypeError $ "not reversible")
+opNEq :: Value
+opNEq = VLitFun (TFun JFun TInt (TFun JFun TInt TBool)) "!=" (\r -> do
+    r <- typeRequired $ checkInt r
+    return $ opNEqK r) "" (\_ -> TypeError $ "not reversible")
+opNEqK :: Int -> Value
+opNEqK r = VLitFun (TFun JFun TInt TBool) ("!=" ++ show r) (\l -> do
+    l <- typeRequired $ checkInt l
+    return $ VBool $ l /= r) "" (\_ -> TypeError $ "not reversible")
+opLEq :: Value
+opLEq = VLitFun (TFun JFun TInt (TFun JFun TInt TBool)) "<=" (\r -> do
+    r <- typeRequired $ checkInt r
+    return $ opLEqK r) "" (\_ -> TypeError $ "not reversible")
+opLEqK :: Int -> Value
+opLEqK r = VLitFun (TFun JFun TInt TBool) ("<=" ++ show r) (\l -> do
+    l <- typeRequired $ checkInt l
+    return $ VBool $ l <= r) "" (\_ -> TypeError $ "not reversible")
+opLTh :: Value
+opLTh = VLitFun (TFun JFun TInt (TFun JFun TInt TBool)) "<" (\r -> do
+    r <- typeRequired $ checkInt r
+    return $ opLThK r) "" (\_ -> TypeError $ "not reversible")
+opLThK :: Int -> Value
+opLThK r = VLitFun (TFun JFun TInt TBool) ("<" ++ show r) (\l -> do
+    l <- typeRequired $ checkInt l
+    return $ VBool $ l < r) "" (\_ -> TypeError $ "not reversible")
+opGEq :: Value
+opGEq = VLitFun (TFun JFun TInt (TFun JFun TInt TBool)) ">=" (\r -> do
+    r <- typeRequired $ checkInt r
+    return $ opGEqK r) "" (\_ -> TypeError $ "not reversible")
+opGEqK :: Int -> Value
+opGEqK r = VLitFun (TFun JFun TInt TBool) (">=" ++ show r) (\l -> do
+    l <- typeRequired $ checkInt l
+    return $ VBool $ l >= r) "" (\_ -> TypeError $ "not reversible")
+opGTh :: Value
+opGTh = VLitFun (TFun JFun TInt (TFun JFun TInt TBool)) ">" (\r -> do
+    r <- typeRequired $ checkInt r
+    return $ opGThK r) "" (\_ -> TypeError $ "not reversible")
+opGThK :: Int -> Value
+opGThK r = VLitFun (TFun JFun TInt TBool) (">" ++ show r) (\l -> do
+    l <- typeRequired $ checkInt l
+    return $ VBool $ l > r) "" (\_ -> TypeError $ "not reversible")
+opAnd :: Value
+opAnd = VLitFun (TFun JFun TBool (TFun JFun TBool TBool)) "&&" (\r -> do
+    r <- typeRequired $ checkBool r
+    return $ opAndK r) "" (\_ -> TypeError $ "not reversible")
+opAndK :: Bool -> Value
+opAndK r = VLitFun (TFun JFun TBool TBool) ("&&" ++ show r) (\l -> do
+    l <- typeRequired $ checkBool l
+    return $ VBool $ l && r) "" (\_ -> TypeError $ "not reversible")
+opOr :: Value
+opOr = VLitFun (TFun JFun TBool (TFun JFun TBool TBool)) "||" (\r -> do
+    r <- typeRequired $ checkBool r
+    return $ opOrK r) "" (\_ -> TypeError $ "not reversible")
+opOrK :: Bool -> Value
+opOrK r = VLitFun (TFun JFun TBool TBool) ("||" ++ show r) (\l -> do
+    l <- typeRequired $ checkBool l
+    return $ VBool $ l || r) "" (\_ -> TypeError $ "not reversible")
+                
 opConcat :: Value
 opConcat = VLitFun (TFun JFun TString (TFun JFun TString TString)) "++" (\r -> do
     r <- typeRequired $ checkString r
@@ -87,7 +153,15 @@ opRejectK :: String -> Value
 opRejectK msg = VLitFun (TFun JRev TTop TBottom) name impl name impl
     where name = "reject(" ++ show msg ++ ")"
           impl v = Rejected msg
-                
+opDebug :: Value
+opDebug = VLitFun (TForall (User "A") (TFun JFun TTop (TFun JRev (TVar $ User "A") (TVar $ User "A")))) "debug" (
+    \v -> return $ opDebugK v) "" (\_ -> TypeError $ "not reversible")
+opDebugK :: Value -> Value
+opDebugK k = VLitFun (TFun JRev TTop TBottom) name impl name impl
+    where name = "debug(" ++ show k ++ ")"
+          impl v =
+            Debug.Trace.trace (show k ++ " " ++ show v) (return v)
+    
 
 _internals = [
     VBool True, 
@@ -96,7 +170,8 @@ _internals = [
     opForget,
     opRemember,
     opError,
-    opReject
+    opReject,
+    opDebug
     ]
 internals :: (Context c, Monoid (c Name Value)) => c Name Value
 internals = mkContext $ map (\v -> (User $ show v, v)) _internals

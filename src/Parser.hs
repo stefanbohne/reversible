@@ -124,7 +124,15 @@ pExprArith = makeExprParser pExprTyped [
         [binOpLit InfixL "+" opPlus,
          binOpLit InfixL "-" opMinus],
         [binOp InfixR "::" (\l r -> ECons l r),
-         binOpLit InfixL "++" opConcat]
+         binOpLit InfixL "++" opConcat],
+        [binOpLit InfixN "==" opEqu,
+         binOpLit InfixN "!=" opNEq,
+         binOpLit InfixN "<=" opLEq,
+         binOpLit InfixN "<" opLTh,
+         binOpLit InfixN ">=" opGEq,
+         binOpLit InfixN ">" opGTh],
+        [binOpLit InfixL "&&" opAnd,
+         binOpLit InfixL "||" opOr]
     ]
 pExprLet = (do
     try $ symbol "let"

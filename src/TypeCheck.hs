@@ -8,7 +8,8 @@ import Data.Maybe
 import Data.Functor.Identity
 import Algebra.PartialOrd
 import Algebra.Lattice
-import Debug.Trace
+import qualified Debug.Trace
+import Debug.Trace (traceM)
 
 import Result
 import AST
@@ -160,18 +161,23 @@ typeCheck1 (EVar n) False _ t = do
     return (JRev, t, [n])
 
 typeCheck1 (EApp f a) fw j t = do
+    (_, nonlin1, lin1) <- get
     (_, tf, vsf) <- localNonLin $ typeCheck f True JFun (TFun j TBottom TTop)
     (jf, atf, rtf) <- lift $ getFunType tf
-    (_, _, lin1) <- get
     (ja, ta, vsa) <- typeCheck a fw j atf
     (_, _, lin2) <- get
-    case (keys (filterValues (outerJoin lin1 lin2) $ \case
-            (_, OJB (Just _) Nothing) -> True
-            (n, OJL _) -> error $ "Variable " ++ show n ++ " disappeared"
-            _ -> False) :: [Name]) `intersect` vsf of
+    let lins = filterValues (outerJoin lin1 lin2) (\(n, x) -> case x of
+            OJB Nothing Nothing -> False
+            OJB _ Nothing -> True
+            OJB Nothing _ -> error "linear variable redefined"
+            OJB _ _ -> False
+            OJL _ -> error "linear variable disappeared"
+            OJR Nothing -> False
+            OJR _ -> True)
+    case ((keys lins) `intersect` vsf) of
         [] -> return (ja \/ jf, rtf, vsf ++ vsa)
         n : _ -> lift $ Rejected $ "Variable '" ++ show n ++ "' is used in function and linearly in argument"
-
+    
 typeCheck1 (ETypeApp f a) True _ t = do
     (_, ta, vsa) <- typeCheck a True JFun TType
     va' <- typeEval a
@@ -201,7 +207,7 @@ typeCheck1 (ELam jc p b) True _ t = do
                 intercalate ", " (map show $ keys (filterValues lin (\(_, t) -> t /= Nothing)))
         else
             return (JFun, TFun (jp \/ jb \/ lin2jc full) tp tb, 
-                filter (\n -> find (== n) (keys lin) /= Nothing) (vsp ++ vsf))
+                filter (\n -> find (== n) (keys lin) == Nothing) (vsp ++ vsf))
 typeCheck1 (ELam _ _ _) False _ _ = do
     lift $ Rejected "Lambda as pattern"
 
