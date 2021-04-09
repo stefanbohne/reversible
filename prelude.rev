@@ -184,14 +184,16 @@ pDigit: Parser{Int} =
             ([("0", 0), ("1", 1), ("2", 2), ("3", 3), ("4", 4), 
               ("5", 5), ("6", 6), ("7", 7), ("8", 8), ("9", 9)])
     )
-// parser a sequence of digits base-10 into a single integer
+// parses a sequence of digits base-10 into a single integer
 pInt: Parser{Int} = pMap{[Int]}{Int}(pRep1{Int}(pDigit))(
-    fix(digits2Int: [Int] <=> Int = 
-        \ds => case ds of
-            [0] => 0;
-            [] => 0;
-            append{Int}(rds, d) => muladd(10)(digits2Int(rds), d))
-    )
+    \ds => case ds of 
+        [0] => 0;
+        ds2 => fix(digits2Int: [Int] <=> Int = 
+            \ds3 => case ds3 of
+                [] => 0;
+                append{Int}(rds, d) => muladd(10)(digits2Int(rds), d))(ds2)
+        )
+
 // parses an identifier
 pIdent: Parser{String} = pMap{[[String]]}{String}(
     pSeq{[String]}([
@@ -207,18 +209,22 @@ pKeyValue: Parser{[(String, Int)]} =
         pThen{String}{Int}(pIdent, pThenR{Int}(pWS(" "), pThenR{Int}(pWord("="), pThenR{Int}(pWS(" "), pInt))))
     )(pThenL{()}(pWS(""), pThenR{()}(pWord(","), pWS(" "))))
 
-// filter function. where(f)(x) returns x, but only if f(x) == True.
+// filter function. where{A}(f)(x) returns x, but only if f(x) == True.
 // otherwise it fails
 where: forall A. (A -> Bool) -> A <=> A =
     forall A. \check => \a => 
         case &(check(a)) of
             &True => a
+// absolute value
+abs: Int <=> Int = \a => case a of
+    where{Int}(\aa => aa >= 0)(aa) => aa;
+    aa => aa * (0 - 1)
 // example: integer multiplication defined using integer addition
 mulFromAdd: Int -> Int <=> Int =
     \k => \x => case x of
         &0 => 
             let y = forget{Int}(0)~() in
-            where{Int}(\yy => (0-k < yy && yy < k) || (k < yy && yy < 0-k))(y);
+            where{Int}(\yy => abs(yy) < k)(y);
         where{Int}(\xx => xx > 0 && k > 0)(xx) => 
             where{Int}(\yy => yy > 0 && k > 0)(mulFromAdd(k)(xx - 1) + k);
         where{Int}(\xx => xx > 0 && k < 0)(xx) => 

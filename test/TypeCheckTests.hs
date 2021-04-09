@@ -130,6 +130,7 @@ test_case = do
     tcTestFail "\\n: Int => case n of 1 => n"
     tcTestFail "\\n: Int => case 1 of n => 1"
     tcTest "case 1 of n => n; m => m" (JRev, "Int")
+    tcTest "case 1 of n => &n" (JFun, "Int")
     tcTest "case 1 of n => n; m => &m" (JFun, "Int")
     tcTest "case 1 of n => &n; m => m" (JFun, "Int")
     tcTest "\\x: Int => case 1 of 1 => x; 2 => x" (JFun, "Int <=> Int")

@@ -271,7 +271,9 @@ typeCheck1 (ECaseOf e cs) True j t = do
         return (jv \/ jp, tv, vsp ++ vsv)
     }
     (jcs, tcs, vscs) <- foldl1 f cs' 
-    return (jcs, tcs, vse ++ vscs)
+    (_, _, lin) <- get
+    let full = allValues lin (\(_, t) -> t == Nothing)
+    return (jcs \/ lin2jc full, tcs, vse ++ vscs)
     where 
         f l r = do
             (full, (jl, tl, vsl), (jr, tr, vsr)) <- par (\l r -> return $ l \/ r) l r

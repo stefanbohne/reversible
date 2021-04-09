@@ -15,6 +15,7 @@ data Result a =
     |   Error String
     |   TypeError String
     deriving (Show, Eq)
+newtype ResultT m a = ResultT { runResultT :: m (Result a) }
 force :: Result a -> Result a
 force (Suspended (Suspended a)) = force a
 force (Suspended a) = a
@@ -25,6 +26,8 @@ instance Functor Result where
     fmap f (Rejected s) = Rejected s
     fmap f (Error s) = Error s
     fmap f (TypeError s) = TypeError s
+instance Functor m => Functor (ResultT m) where
+    fmap f (ResultT x) = ResultT $ fmap (fmap f) x
 instance Applicative Result where
     pure = Success
     (Success f) <*> (Success x) = Success $ f x
@@ -37,12 +40,19 @@ instance Applicative Result where
     (Error s) <*> _ = Error s
     _ <*> (Rejected s) = Rejected s
     (Rejected s) <*> _ = Rejected s
+instance (Monad m) => Applicative (ResultT m) where
+    pure = ResultT . pure . pure
+    (ResultT f) <*> (ResultT x) = ResultT $ do
+        f <- f
+        x <- x
+        return $ f <*> x
 instance Monad Result where
     (Success x) >>= f = f x
     (Suspended a) >>= f = Suspended $ a >>= f
     Rejected s >>= f = Rejected s
     Error s >>= f = Error s
     TypeError s >>= f = TypeError s
+        
 instance MonadFail Result where
     fail msg = error msg
 instance Alternative Result where
